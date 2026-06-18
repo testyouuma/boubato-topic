@@ -1,14 +1,14 @@
 :root {
-  /* うごメモ基調: 生成り紙 + 赤×青のフリップノート2色 + 黒インク */
+  /* うごメモ基調: 生成り紙 + オレンジ2トーン + 黒インク */
   --paper: #fbf7ec;
   --paper2: #fffdf6;
   --ink: #2a2620;
   --ink-soft: #6b6358;
-  --red: #e60012;
-  --blue: #0096e0;
-  --yellow: #ffd23c;
-  --line: rgba(0, 150, 224, 0.14);   /* 罫線 */
-  --margin-line: rgba(230, 0, 18, 0.35); /* 左の赤マージン線 */
+  --orange: #ff7a1a;        /* メインのオレンジ */
+  --orange-deep: #e8590c;   /* 濃いオレンジ */
+  --yellow: #ffc23c;
+  --line: rgba(255, 122, 26, 0.13);     /* 罫線（オレンジ薄） */
+  --margin-line: rgba(232, 89, 12, 0.40); /* 左のマージン線 */
   --nico: #ffaa00;
   --yt: #ff0033;
   --twitter: #1d9bf0;
@@ -58,14 +58,16 @@ a { color: inherit; text-decoration: none; }
   background-image: radial-gradient(circle, var(--paper) 42%, transparent 44%);
   background-size: 8px 30px; background-repeat: repeat-y;
 }
-.frog { font-size: 2rem; display: inline-block; transform: rotate(-8deg); }
+.mascot { width: 46px; height: 54px; display: inline-block; transform: rotate(-4deg); }
+.mascot .ink { stroke: var(--ink); }
+.mascot .motion { stroke: var(--orange); }
 .logo {
   font-size: 2.6rem; font-weight: 800; letter-spacing: .03em; line-height: 1.1;
-  margin-top: 2px; color: var(--red);
+  margin-top: 2px; color: var(--orange);
   -webkit-text-stroke: 1px var(--ink);
   text-shadow: 2px 2px 0 rgba(0,0,0,.08);
 }
-.logo span { color: var(--blue); }
+.logo span { color: var(--orange-deep); }
 .tagline { color: var(--ink-soft); margin-top: 8px; font-size: .95rem; font-weight: 500; }
 .updated {
   margin-top: 14px; display: inline-block;
@@ -97,7 +99,7 @@ a { color: inherit; text-decoration: none; }
 section { padding: 30px 0 12px; scroll-margin-top: 64px; }
 .section-title {
   font-size: 1.5rem; font-weight: 800; display: inline-block;
-  border-bottom: 4px solid var(--blue); padding-bottom: 2px;
+  border-bottom: 4px solid var(--orange-deep); padding-bottom: 2px;
 }
 .section-sub { color: var(--ink-soft); font-size: .9rem; font-weight: 500; margin: 6px 0 18px; }
 
@@ -111,7 +113,7 @@ section { padding: 30px 0 12px; scroll-margin-top: 64px; }
 }
 .year-tab:hover, .subtab:hover { background: var(--yellow); transform: translate(-1px,-1px); }
 .year-tab.active, .subtab.active {
-  background: var(--red); border-color: var(--ink); color: #fff;
+  background: var(--orange); border-color: var(--ink); color: #fff;
   box-shadow: 2px 2px 0 var(--ink);
 }
 
@@ -130,7 +132,7 @@ section { padding: 30px 0 12px; scroll-margin-top: 64px; }
 .card:nth-child(3n) { transform: rotate(0.7deg); }
 .card:hover {
   transform: rotate(0deg) translate(-2px, -3px);
-  box-shadow: 6px 7px 0 var(--ink); border-color: var(--blue);
+  box-shadow: 6px 7px 0 var(--ink); border-color: var(--orange-deep);
 }
 .thumb-wrap { position: relative; aspect-ratio: 16/9; background: #000; overflow: hidden; border-bottom: 3px solid var(--ink); }
 .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -160,7 +162,7 @@ section { padding: 30px 0 12px; scroll-margin-top: 64px; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .card-meta { margin-top: auto; font-size: .76rem; color: var(--ink-soft); font-weight: 500; display: flex; gap: 10px; flex-wrap: wrap; }
-.card-meta .ch { color: var(--blue); font-weight: 700; }
+.card-meta .ch { color: var(--orange-deep); font-weight: 700; }
 
 /* ===== お知らせ ===== */
 .notice {
@@ -170,7 +172,7 @@ section { padding: 30px 0 12px; scroll-margin-top: 64px; }
 .notice h3 { margin-bottom: 8px; font-weight: 800; }
 .notice p { color: var(--ink-soft); font-size: .92rem; font-weight: 500; margin-bottom: 16px; }
 .btn {
-  display: inline-block; background: var(--twitter); color: #fff;
+  display: inline-block; background: var(--orange-deep); color: #fff;
   padding: 9px 20px; border-radius: 10px; font-weight: 800; font-size: .9rem;
   border: 2.5px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); transition: .12s;
 }
