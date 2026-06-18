@@ -1,0 +1,47 @@
+name: Update Boubato Topics
+
+# 1日2回更新（JST 07:00 / 19:00 = UTC 22:00 / 10:00）
+on:
+  schedule:
+    - cron: "0 22 * * *"   # JST 07:00
+    - cron: "0 10 * * *"   # JST 19:00
+  workflow_dispatch: {}     # 手動実行も可能
+
+permissions:
+  contents: write
+
+concurrency:
+  group: boubato-topics
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r boubato/requirements.txt
+
+      - name: Fetch topics
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python boubato/scraper.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/topics.json
+          if git diff --staged --quiet; then
+            echo "変更なし。コミットをスキップします。"
+          else
+            git commit -m "chore: update boubato topics ($(date -u +%Y-%m-%dT%H:%MZ))"
+            git push
+          fi
