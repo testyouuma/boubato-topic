@@ -1,5 +1,5 @@
 // オフラインでも開けるようにアプリ本体をキャッシュする
-const CACHE = "shinchoku-v1";
+const CACHE = "shinchoku-v2";
 const ASSETS = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
