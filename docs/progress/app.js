@@ -24,6 +24,8 @@
   let taskFilter = "open";
   let calMonth = firstOfMonth(new Date());
   let calSelected = ymd(new Date());
+  let schedDate = ymd(new Date());
+  let suggestion = null; // { date, blocks } まだ決定していないTodo提案
 
   function load() {
     let d = { tasks: [], routines: [] };
@@ -37,7 +39,13 @@
   function migrate(d) {
     const tasks = (d.tasks || []).map((t) => ({ kind: "normal", steps: [], start: "", ...t }));
     const routines = (d.routines || []).map((r) => ({ end: addMinutes(r.time || "07:00", 30), doneDates: [], ...r }));
-    return { tasks, routines };
+    const events = d.events || [];
+    // 60日より前の日のスケジュールは消して軽く保つ
+    const cutoff = ymd(addDays(new Date(), -60));
+    const plans = {};
+    Object.entries(d.plans || {}).forEach(([k, v]) => { if (k >= cutoff && v.length) plans[k] = v; });
+    const settings = { wake: "07:00", sleep: "23:00", ...(d.settings || {}) };
+    return { tasks, routines, events, plans, settings };
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -53,7 +61,7 @@
   const todayStr = () => ymd(new Date());
   const parseLocal = (s) => (s ? new Date(s) : null); // "YYYY-MM-DDTHH:MM" はローカル時刻
   const parseDay = (s) => (s ? new Date(`${s}T00:00`) : null);
-  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
   const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
   const mdw = (d) => `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`;
   function addMinutes(time, m) {
@@ -225,12 +233,12 @@
   const main = $("#main");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const TITLES = { today: "今日", tasks: "タスク", calendar: "カレンダー", routines: "ルーティン" };
+  const TITLES = { today: "今日", schedule: "スケジュール", tasks: "タスク", calendar: "カレンダー", routines: "ルーティン" };
 
   function render() {
     $("#screen-title").textContent = TITLES[tab];
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-    ({ today: renderToday, tasks: renderTasks, calendar: renderCalendar, routines: renderRoutines })[tab]();
+    ({ today: renderToday, schedule: renderSchedule, tasks: renderTasks, calendar: renderCalendar, routines: renderRoutines })[tab]();
   }
 
   function progressBar(t) {
@@ -297,7 +305,15 @@
     const pct = total ? Math.round((got / total) * 100) : 0;
     const C = 2 * Math.PI * 36;
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    const current = todays.find((r) => !isDoneOn(r, ts) && nowMin >= toMin(r.time) && nowMin < (toMin(r.end) > toMin(r.time) ? toMin(r.end) : 1440));
+    const dayList = dayItems(ts).filter((i) => !i.done);
+    const current = dayList.find((i) => nowMin >= i.s && nowMin < i.e);
+    const next = dayList.find((i) => i.s > nowMin);
+    const kindLabel = { event: "予定", routine: "ルーティン", plan: "Todo" };
+    const nowCard = (current || next) ? `<button class="now-banner" data-goto="schedule">
+        ${current ? `<span>▶ いま：${esc(current.title)}（〜${current.end}）</span>` : ""}
+        ${next ? `<span class="next">次：${next.start} ${esc(next.title)} <small>${kindLabel[next.kind]}</small></span>` : ""}
+        <small class="go">スケジュールを見る ›</small></button>`
+      : `<button class="now-banner" data-goto="schedule"><span>このあとの予定はありません</span><small class="go">💡 Todoを提案してもらう ›</small></button>`;
 
     main.innerHTML = `
       <section class="summary">
@@ -317,7 +333,7 @@
           <div class="stat ${dueToday.length ? "warn" : ""}"><div class="n">${dueToday.length}</div><div class="l">今日が期限</div></div>
           <div class="stat"><div class="n">${open.length}</div><div class="l">未完了タスク</div></div>
         </div>
-        ${current ? `<div class="now-banner">▶ いまは「${esc(current.title)}」の時間（〜${current.end}）</div>` : ""}
+        ${nowCard}
       </section>
 
       <div class="section-title">今日のルーティン <small>${rDone}/${todays.length}</small></div>
@@ -387,6 +403,8 @@
         const cls = t.done ? "done" : parseLocal(t.due) < now ? "over" : isLong(t) ? "long" : "";
         return `<i class="dot ${cls}" ${isLong(t) && !t.done ? `style="background:${longColor(t)}"` : ""}></i>`;
       }).join("") + (dues.length > 3 ? `<i class="more">+</i>` : "");
+      const evs = eventsOn(ds);
+      const evDots = evs.slice(0, 2).map(() => `<i class="dot ev"></i>`).join("") + (evs.length > 2 ? `<i class="more">+</i>` : "");
       const bars = longs.filter((t) => longCovers(t, ds)).slice(0, 3).map((t) => {
         const s = (t.start || t.due.slice(0, 10)) === ds || d.getDay() === 0;
         const e = t.due.slice(0, 10) === ds || d.getDay() === 6;
@@ -398,7 +416,7 @@
         d.getDay() === 0 ? "sun" : d.getDay() === 6 ? "sat" : ""].join(" ");
       cells += `<button class="cal-cell ${cls}" data-day="${ds}">
         <span class="num">${d.getDate()}${allDone ? '<em class="rdone">✓</em>' : ""}</span>
-        <span class="spans">${bars}</span><span class="dots">${dots}</span></button>`;
+        <span class="spans">${bars}</span><span class="dots">${evDots}${dots}</span></button>`;
     }
 
     main.innerHTML = `
@@ -410,7 +428,7 @@
         </div>
         <div class="cal-grid wd">${WD.map((w, i) => `<span class="${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${w}</span>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
-        <div class="cal-legend"><span><i class="dot"></i>期限</span><span><i class="dot over"></i>期限切れ</span><span><i class="span s e" style="background:var(--primary)"></i>長期タスクの期間</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
+        <div class="cal-legend"><span><i class="dot ev"></i>予定</span><span><i class="dot"></i>期限</span><span><i class="dot over"></i>期限切れ</span><span><i class="span s e" style="background:var(--primary)"></i>長期タスクの期間</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
         ${calMonth.getTime() !== firstOfMonth(now).getTime() ? `<button class="text-btn" data-cal-today style="justify-self:center">今日に戻る</button>` : ""}
       </section>
       ${dayAgenda(calSelected)}`;
@@ -422,11 +440,17 @@
     const routines = state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time));
     const dues = state.tasks.filter((t) => t.due && t.due.slice(0, 10) === ds).sort((a, b) => a.due.localeCompare(b.due));
     const ongoing = state.tasks.filter((t) => longCovers(t, ds) && !dues.includes(t));
-    const empty = !routines.length && !dues.length && !ongoing.length;
+    const evs = eventsOn(ds);
+    const planN = (state.plans[ds] || []).length;
+    const empty = !routines.length && !dues.length && !ongoing.length && !evs.length;
     return `
-      <div class="section-title">${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）${ds === ts ? " ・今日" : ""}
-        <button class="text-btn" data-add-on="${ds}">＋ この日にタスク</button></div>
+      <div class="section-title">${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）${ds === ts ? " ・今日" : ""}</div>
+      <div class="agenda-actions">
+        <button class="chip" data-add-event="${ds}">＋ 予定</button><button class="chip" data-add-on="${ds}">＋ タスク</button>
+        <button class="chip on" data-open-schedule="${ds}">🗓 スケジュール表${planN ? `（Todo ${planN}）` : ""}</button>
+      </div>
       ${empty ? `<div class="empty">予定はありません</div>` : ""}
+      ${evs.length ? `<div class="sub-title">予定</div><div class="list">${evs.map((ev) => eventCard(ev)).join("")}</div>` : ""}
       ${routines.length ? `<div class="sub-title">ルーティン</div><div class="list">${routines.map((r) => routineCard(r, ds, ds <= ts)).join("")}</div>` : ""}
       ${dues.length ? `<div class="sub-title">この日が期限</div><div class="list">${dues.map(taskCard).join("")}</div>` : ""}
       ${ongoing.length ? `<div class="sub-title">期間中の長期タスク</div><div class="list">${ongoing.map(taskCard).join("")}</div>` : ""}`;
@@ -478,6 +502,7 @@
       </div>
       <div class="field" id="f-progress-field"><label for="f-progress">進捗 <b id="f-pv">${t.progress}%</b></label>
         <input type="range" id="f-progress" min="0" max="100" step="5" value="${t.progress}"></div>
+      <div class="field"><label for="f-est" id="f-est-label">かかる時間の目安（Todo提案で使います）</label><select id="f-est">${EST_OPTS.map((v) => `<option value="${v}" ${(t.est || 60) === v ? "selected" : ""}>${durText(v)}</option>`).join("")}</select></div>
       <div class="field"><label for="f-remind">通知</label><select id="f-remind">${opts}</select></div>
       <div class="field"><label for="f-memo">メモ</label><textarea id="f-memo" placeholder="任意">${esc(t.memo)}</textarea></div>
       <div class="actions">
@@ -493,6 +518,7 @@
         f.querySelectorAll(".normal-only").forEach((el) => (el.hidden = kind === "long"));
         $("#f-progress-field", f).hidden = kind === "long" && steps.length > 0;
         $("#f-title", f).placeholder = kind === "long" ? "例：資格試験に合格する" : "例：レポートを提出する";
+        $("#f-est-label", f).textContent = kind === "long" ? "1回あたりの作業時間（Todo提案で使います）" : "かかる時間の目安（Todo提案で使います）";
         if (kind === "long" && !startI.value) startI.value = todayStr();
       };
       const paintSteps = () => {
@@ -557,6 +583,7 @@
           start: kind === "long" ? startI.value : "",
           steps: kind === "long" ? steps.filter((s) => s.title.trim()) : [],
           progress: Number($("#f-progress", f).value),
+          est: Number($("#f-est", f).value),
         });
         if (progressOf({ ...t, done: false }) >= 100 && !t.done) { t.done = true; t.doneAt = Date.now(); }
         if (changedSchedule && !isNew) t.calAdded = false;
@@ -666,9 +693,13 @@
   function menuSheet() {
     const pendingTasks = state.tasks.filter((t) => !t.done && t.due && t.remind >= 0 && !t.calAdded && parseLocal(t.due) > new Date());
     const pendingRoutines = state.routines.filter((r) => !r.calAdded);
-    const n = pendingTasks.length + pendingRoutines.length;
+    const pendingEvents = state.events.filter((ev) => !ev.calAdded && ev.remind >= 0 && (ev.repeat === "weekly" || ev.date >= todayStr()));
+    const n = pendingTasks.length + pendingRoutines.length + pendingEvents.length;
     openSheet(`
       <h2>メニュー</h2>
+      <div class="field"><span class="label">1日の活動時間（Todo提案はこの間で考えます）</span>
+        <div class="row2 time-range"><label class="mini">起きる<input type="time" id="m-wake" value="${state.settings.wake}"></label>
+          <label class="mini">寝る<input type="time" id="m-sleep" value="${state.settings.sleep}"></label></div></div>
       <div class="menu-list">
         <button type="button" class="btn cal" id="m-cal" ${n ? "" : "disabled"}>🔔 未登録の通知をまとめてカレンダーに追加（${n}件）</button>
         <button type="button" class="btn" id="m-export">📤 バックアップを書き出す</button>
@@ -681,8 +712,16 @@
     (f) => {
       f.onsubmit = (e) => e.preventDefault();
       $("#m-close", f).onclick = closeSheet;
+      const saveTimes = () => {
+        state.settings.wake = $("#m-wake", f).value || "07:00";
+        state.settings.sleep = $("#m-sleep", f).value || "23:00";
+        save();
+      };
+      $("#m-wake", f).onchange = saveTimes;
+      $("#m-sleep", f).onchange = saveTimes;
       $("#m-cal", f).onclick = () => {
-        const ev = [...pendingTasks.flatMap(taskEvent), ...pendingRoutines.flatMap(routineEvent)];
+        const ev = [...pendingTasks.flatMap(taskEvent), ...pendingRoutines.flatMap(routineEvent), ...pendingEvents.flatMap(eventEvent)];
+        pendingEvents.forEach((x) => (x.calAdded = true));
         openIcs(buildIcs(ev), "shinchoku-all.ics");
         pendingTasks.forEach((t) => (t.calAdded = true));
         pendingRoutines.forEach((r) => (r.calAdded = true));
@@ -715,6 +754,363 @@
         state.tasks = state.tasks.filter((t) => !t.done); save(); closeSheet(); render(); toast(`${n2}件を整理しました`);
       };
     });
+  }
+
+  /* ---------- 予定（イベント） ---------- */
+  const EST_OPTS = [15, 30, 45, 60, 90, 120, 180, 240];
+  function durText(m) { return m < 60 ? `${m}分` : `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + "分" : ""}`; }
+  const fmtMin = (m) => { m = Math.min(Math.max(m, 0), 1439); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
+  const icsDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const endMin = (start, end) => (toMin(end) > toMin(start) ? toMin(end) : 1440);
+  function eventOn(ev, ds) {
+    if (ev.repeat === "weekly") return ds >= ev.date && parseDay(ds).getDay() === parseDay(ev.date).getDay();
+    return ev.date === ds;
+  }
+  function eventsOn(ds) {
+    return state.events.filter((ev) => eventOn(ev, ds))
+      .sort((a, b) => (a.allDay ? "" : a.start).localeCompare(b.allDay ? "" : b.start));
+  }
+  function eventCard(ev) {
+    const meta = (ev.place ? `<span>📍 ${esc(ev.place)}</span>` : "") +
+      (ev.repeat === "weekly" ? `<span class="badge">毎週${WD[parseDay(ev.date).getDay()]}曜</span>` : "") +
+      (ev.calAdded ? `<span class="badge cal">🔔通知</span>` : "") + (ev.memo ? `<span>📝 メモあり</span>` : "");
+    return `<div class="card evcard" data-event="${ev.id}">
+      <div class="ev-time">${ev.allDay ? "終日" : `${ev.start}<small>${ev.end}</small>`}</div>
+      <div class="body"><div class="title">${esc(ev.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div></div>`;
+  }
+  function eventEvent(ev) {
+    const lines = ["BEGIN:VEVENT", `UID:event-${ev.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`];
+    const d = parseDay(ev.date);
+    if (ev.allDay) lines.push(`DTSTART;VALUE=DATE:${icsDate(d)}`, `DTEND;VALUE=DATE:${icsDate(addDays(d, 1))}`);
+    else {
+      const s = new Date(`${ev.date}T${ev.start}`);
+      const m = endMin(ev.start, ev.end) - toMin(ev.start);
+      lines.push(`DTSTART:${icsLocal(s)}`, `DTEND:${icsLocal(new Date(s.getTime() + m * 60000))}`);
+    }
+    if (ev.repeat === "weekly") lines.push("RRULE:FREQ=WEEKLY");
+    lines.push(`SUMMARY:${icsEsc(ev.title)}`);
+    if (ev.place) lines.push(`LOCATION:${icsEsc(ev.place)}`);
+    if (ev.memo) lines.push(`DESCRIPTION:${icsEsc(ev.memo)}`);
+    if (ev.remind >= 0) {
+      if (ev.allDay) lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEsc(ev.title)}`,
+        ev.remind >= 1440 ? "TRIGGER:-PT15H" : "TRIGGER:PT8H", "END:VALARM"); // 前日9時 / 当日8時
+      else lines.push(...alarm(`${ev.start}〜 ${ev.title}`, ev.remind));
+    }
+    lines.push("END:VEVENT");
+    return lines;
+  }
+  function planEvent(ds, p) {
+    const s = new Date(`${ds}T${p.start}`);
+    const m = endMin(p.start, p.end) - toMin(p.start);
+    return ["BEGIN:VEVENT", `UID:plan-${p.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`,
+      `DTSTART:${icsLocal(s)}`, `DTEND:${icsLocal(new Date(s.getTime() + m * 60000))}`,
+      `SUMMARY:${icsEsc("✅ " + p.title)}`, ...alarm(`Todoの時間です：${p.title}`, 0), "END:VEVENT"];
+  }
+
+  function eventSheet(ev, presetDate) {
+    const isNew = !ev;
+    if (!ev) {
+      const ds = presetDate || todayStr();
+      let st = "10:00";
+      if (ds === todayStr()) { const n = new Date(); st = fmtMin(Math.min((n.getHours() + 1) * 60, 1380)); }
+      ev = { id: uid(), title: "", date: ds, allDay: false, start: st, end: addMinutes(st, 60), place: "", repeat: "none", remind: 30, memo: "", calAdded: false };
+    }
+    const remindOpts = [[-1, "通知しない"], [0, "開始の時刻"], [10, "10分前"], [30, "30分前"], [60, "1時間前"], [1440, "前日"]]
+      .map(([v, l]) => `<option value="${v}" ${ev.remind === v ? "selected" : ""}>${l}</option>`).join("");
+    openSheet(`
+      <h2>${isNew ? "予定を追加" : "予定を編集"}</h2>
+      <div class="field"><label for="e-title">予定</label>
+        <input type="text" id="e-title" value="${esc(ev.title)}" placeholder="例：歯医者・バイト・授業" autocomplete="off" required></div>
+      <div class="field"><label for="e-date">日付</label><input type="date" id="e-date" value="${ev.date}" required></div>
+      <label class="switch"><input type="checkbox" id="e-allday" ${ev.allDay ? "checked" : ""}><span>終日</span></label>
+      <div class="field" id="e-time-field"><span class="label">時間</span>
+        <div class="row2 time-range"><label class="mini">開始<input type="time" id="e-start" value="${ev.start}"></label>
+          <label class="mini">終了<input type="time" id="e-end" value="${ev.end}"></label></div>
+        <div class="quick"><button type="button" class="chip" data-len="30">30分</button><button type="button" class="chip" data-len="60">1時間</button>
+          <button type="button" class="chip" data-len="120">2時間</button><button type="button" class="chip" data-len="240">4時間</button></div></div>
+      <div class="field"><label for="e-place">場所</label><input type="text" id="e-place" value="${esc(ev.place)}" placeholder="任意" autocomplete="off"></div>
+      <div class="row2">
+        <div class="field"><label for="e-repeat">くり返し</label><select id="e-repeat">
+          <option value="none" ${ev.repeat !== "weekly" ? "selected" : ""}>しない</option>
+          <option value="weekly" ${ev.repeat === "weekly" ? "selected" : ""}>毎週</option></select></div>
+        <div class="field"><label for="e-remind">通知</label><select id="e-remind">${remindOpts}</select></div>
+      </div>
+      <div class="field"><label for="e-memo">メモ</label><textarea id="e-memo" placeholder="任意">${esc(ev.memo)}</textarea></div>
+      <div class="actions">
+        ${isNew ? "" : `<button type="button" class="btn danger" id="e-del">削除</button>`}
+        <button type="button" class="btn" id="e-cancel">キャンセル</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>`,
+    (f) => {
+      const sI = $("#e-start", f), eI = $("#e-end", f), ad = $("#e-allday", f);
+      let len = endMin(ev.start, ev.end) - toMin(ev.start);
+      const paint = () => { $("#e-time-field", f).hidden = ad.checked; };
+      paint();
+      ad.onchange = paint;
+      sI.onchange = () => { if (sI.value) eI.value = addMinutes(sI.value, len); };
+      eI.onchange = () => { if (sI.value && eI.value) len = (toMin(eI.value) - toMin(sI.value) + 1440) % 1440 || 60; };
+      f.querySelectorAll("[data-len]").forEach((b) => b.onclick = () => { len = Number(b.dataset.len); eI.value = addMinutes(sI.value || "10:00", len); });
+      $("#e-cancel", f).onclick = closeSheet;
+      if (!isNew) $("#e-del", f).onclick = () => {
+        if (!confirm(`「${ev.title}」を削除しますか？` + (ev.calAdded ? "\n※カレンダーに追加した予定は、カレンダーアプリから削除してください。" : ""))) return;
+        state.events = state.events.filter((x) => x.id !== ev.id); save(); closeSheet(); render();
+      };
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const title = $("#e-title", f).value.trim();
+        if (!title) { $("#e-title", f).focus(); return; }
+        const date = $("#e-date", f).value || todayStr();
+        const start = sI.value || "10:00";
+        const end = eI.value || addMinutes(start, 60);
+        if (!ad.checked && end === start) { toast("終了時刻を開始時刻と別にしてください"); return; }
+        const next = { title, date, allDay: ad.checked, start, end, place: $("#e-place", f).value.trim(),
+          repeat: $("#e-repeat", f).value, remind: Number($("#e-remind", f).value), memo: $("#e-memo", f).value.trim() };
+        const changed = ["title", "date", "allDay", "start", "end", "repeat", "remind"].some((k) => next[k] !== ev[k]);
+        Object.assign(ev, next);
+        if (changed && !isNew) ev.calAdded = false;
+        if (isNew) state.events.push(ev);
+        save(); render();
+        if (ev.remind >= 0 && !ev.calAdded && (ev.repeat === "weekly" || ev.date >= todayStr())) {
+          calPrompt(() => { openIcs(buildIcs(eventEvent(ev)), `event-${ev.id}.ics`); ev.calAdded = true; save(); render(); }, changed && !isNew);
+        } else closeSheet();
+      };
+      setTimeout(() => { if (isNew) $("#e-title", f).focus(); }, 50);
+    });
+  }
+
+  function addChooser(ds) {
+    const d = parseDay(ds);
+    openSheet(`
+      <h2>${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）に追加</h2>
+      <div class="menu-list">
+        <button type="button" class="btn big" data-c="event">📅 予定<small>時間が決まっている用事（授業・バイト・約束など）</small></button>
+        <button type="button" class="btn big" data-c="task">✅ タスク<small>期限までに終わらせること</small></button>
+        <button type="button" class="btn big" data-c="routine">🔁 ルーティン<small>毎日・毎週くり返す習慣</small></button>
+      </div>
+      <div class="actions"><button type="button" class="btn" id="c-close">閉じる</button></div>`,
+    (f) => {
+      f.onsubmit = (e) => e.preventDefault();
+      $("#c-close", f).onclick = closeSheet;
+      f.querySelectorAll("[data-c]").forEach((b) => b.onclick = () => {
+        const c = b.dataset.c;
+        if (c === "event") eventSheet(null, ds);
+        else if (c === "task") taskSheet(null, ds);
+        else routineSheet();
+      });
+    });
+  }
+
+  /* ---------- スケジュール表とTodo提案 ---------- */
+  // その日の時間が決まっているもの（予定・ルーティン・Todo）を時刻順に
+  function dayItems(ds) {
+    const d = parseDay(ds);
+    const items = [];
+    eventsOn(ds).filter((ev) => !ev.allDay).forEach((ev) =>
+      items.push({ kind: "event", id: ev.id, title: ev.title, start: ev.start, end: ev.end, s: toMin(ev.start), e: endMin(ev.start, ev.end), done: false, sub: ev.place }));
+    state.routines.filter((r) => isScheduled(r, d)).forEach((r) =>
+      items.push({ kind: "routine", id: r.id, title: r.title, start: r.time, end: r.end, s: toMin(r.time), e: endMin(r.time, r.end), done: isDoneOn(r, ds) }));
+    (state.plans[ds] || []).forEach((p) =>
+      items.push({ kind: "plan", id: p.id, title: p.title, start: p.start, end: p.end, s: toMin(p.start), e: endMin(p.start, p.end), done: p.done, sub: p.reason }));
+    return items.sort((a, b) => a.s - b.s || b.e - a.e);
+  }
+
+  function dayWindow(ds) {
+    let from = toMin(state.settings.wake), to = toMin(state.settings.sleep);
+    if (to <= from) to = 1440;
+    if (ds === todayStr()) {
+      const n = new Date();
+      from = Math.max(from, Math.ceil((n.getHours() * 60 + n.getMinutes() + 5) / 15) * 15);
+    }
+    return [from, to];
+  }
+  function freeSlots(ds, extraBusy = []) {
+    const [from, to] = dayWindow(ds);
+    const busy = [...dayItems(ds), ...extraBusy].map((i) => [i.s, i.e]).sort((a, b) => a[0] - b[0]);
+    const slots = [];
+    let cur = from;
+    busy.forEach(([s, e]) => {
+      if (s > cur) slots.push([cur, Math.min(s, to)]);
+      cur = Math.max(cur, e);
+    });
+    if (cur < to) slots.push([cur, to]);
+    return slots.filter(([s, e]) => e - s >= 15);
+  }
+
+  // 期限の近さ・遅れ具合からTodoの優先度を決めて、空き時間に入れていく
+  function suggest(ds) {
+    const day = parseDay(ds);
+    const endOfDay = addDays(day, 1);
+    const isToday = ds === todayStr();
+    const ref = isToday ? new Date() : day;
+    const planned = new Set((state.plans[ds] || []).map((p) => `${p.taskId}|${p.stepId || ""}`));
+    const cands = state.tasks.filter((t) => !t.done && !(isLong(t) && t.start && t.start > ds)).map((t) => {
+      const due = parseLocal(t.due);
+      let score, reason;
+      if (due && due < ref) { score = 1000; reason = "期限切れ"; }
+      else if (due && due < endOfDay) { score = 900; reason = isToday ? "今日が期限" : "この日が期限"; }
+      else if (due) {
+        const dl = Math.ceil((due - endOfDay) / 86400000);
+        const pc = pace(t);
+        if (isLong(t) && pc && pc.cls === "danger") { score = 650; reason = "長期・遅れ気味"; }
+        else if (isLong(t) && pc && pc.cls === "warn") { score = 550; reason = "長期・やや遅れ"; }
+        else if (isLong(t)) { score = Math.max(150, 320 - dl); reason = `長期・期限まで${dl + 1}日`; }
+        else { score = dl <= 2 ? 800 - dl * 50 : Math.max(200, 450 - dl * 5); reason = `期限まで${dl + 1}日`; }
+      } else { score = 100 + (t.progress || 0) / 10; reason = "期限なし"; }
+      let title = t.title, stepId = "";
+      if (isLong(t)) {
+        const s = t.steps.find((x) => !x.done);
+        if (s) { title = `${t.title}：${s.title}`; stepId = s.id; }
+      }
+      return { t, score, reason, title, stepId, dur: t.est || 60 };
+    }).filter((c) => !planned.has(`${c.t.id}|${c.stepId}`)).sort((a, b) => b.score - a.score);
+
+    const slots = freeSlots(ds);
+    const out = [];
+    const GAP = 10; // Todoの間に少し休憩をはさむ
+    for (const c of cands) {
+      if (out.length >= 6) break;
+      for (const slot of slots) {
+        const len = slot[1] - slot[0];
+        if (len >= c.dur || (len >= 30 && c.score >= 800)) {
+          const d = Math.min(c.dur, len);
+          out.push({ id: uid(), taskId: c.t.id, stepId: c.stepId, title: c.title, reason: c.reason + (d < c.dur ? "・途中まで" : ""),
+            start: fmtMin(slot[0]), end: fmtMin(slot[0] + d), done: false });
+          slot[0] += d + GAP;
+          break;
+        }
+      }
+    }
+    return out.sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  function togglePlan(ds, id) {
+    const p = (state.plans[ds] || []).find((x) => x.id === id);
+    if (!p) return;
+    p.done = !p.done;
+    const t = state.tasks.find((x) => x.id === p.taskId);
+    if (t && p.stepId) {
+      const s = t.steps.find((x) => x.id === p.stepId);
+      if (s) s.done = p.done;
+      if (p.done && t.steps.every((x) => x.done) && !t.done) { t.done = true; t.doneAt = Date.now(); toast("ステップが全部おわりました 🎉"); }
+      else if (p.done) toast("ステップを1つ進めました！");
+    } else if (p.done && t && !t.done) toast("おつかれさま！タスクが終わったらタスクにもチェックを");
+    save(); render();
+  }
+
+  function planSheet(ds, id) {
+    const p = (state.plans[ds] || []).find((x) => x.id === id);
+    if (!p) return;
+    const t = state.tasks.find((x) => x.id === p.taskId);
+    openSheet(`
+      <h2>Todo</h2>
+      <p style="margin:0;font-weight:700">${esc(p.title)}</p>
+      ${p.reason ? `<p class="note">提案の理由：${esc(p.reason)}</p>` : ""}
+      <div class="field"><span class="label">時間</span>
+        <div class="row2 time-range"><label class="mini">開始<input type="time" id="p-start" value="${p.start}"></label>
+          <label class="mini">終了<input type="time" id="p-end" value="${p.end}"></label></div></div>
+      <div class="menu-list">
+        <button type="button" class="btn" id="p-done">${p.done ? "↩︎ 未完了にもどす" : "✅ やった！"}</button>
+        ${t ? `<button type="button" class="btn" id="p-task">📝 元のタスクを開く</button>` : ""}
+      </div>
+      <div class="actions">
+        <button type="button" class="btn danger" id="p-del">外す</button>
+        <button type="button" class="btn" id="p-cancel">キャンセル</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>`,
+    (f) => {
+      $("#p-cancel", f).onclick = closeSheet;
+      $("#p-done", f).onclick = () => { closeSheet(); togglePlan(ds, id); };
+      if (t) $("#p-task", f).onclick = () => taskSheet(t);
+      $("#p-del", f).onclick = () => {
+        state.plans[ds] = state.plans[ds].filter((x) => x.id !== id);
+        save(); closeSheet(); render(); toast(p.calAdded ? "外しました（カレンダーの通知は手動で削除してください）" : "スケジュールから外しました");
+      };
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const s = $("#p-start", f).value, en = $("#p-end", f).value;
+        if (!s || !en || s === en) { toast("時間を正しく入れてください"); return; }
+        if (s !== p.start || en !== p.end) p.calAdded = false;
+        Object.assign(p, { start: s, end: en });
+        save(); closeSheet(); render();
+      };
+    });
+  }
+
+  function renderSchedule() {
+    const ds = schedDate;
+    const d = parseDay(ds);
+    const ts = todayStr();
+    const items = dayItems(ds);
+    const sug = suggestion && suggestion.date === ds
+      ? suggestion.blocks.map((b) => ({ kind: "sug", id: b.id, title: b.title, start: b.start, end: b.end, s: toMin(b.start), e: endMin(b.start, b.end), sub: b.reason }))
+      : [];
+    const all = [...items, ...sug].sort((a, b) => a.s - b.s || b.e - a.e);
+    const allDay = eventsOn(ds).filter((ev) => ev.allDay);
+
+    let [from, to] = [toMin(state.settings.wake), toMin(state.settings.sleep)];
+    if (to <= from) to = 1440;
+    all.forEach((i) => { from = Math.min(from, i.s); to = Math.max(to, i.e); });
+    from = Math.floor(from / 60) * 60;
+    to = Math.min(1440, Math.ceil(to / 60) * 60);
+    const PX = 1.1; // 1分あたりのピクセル
+
+    // 重なる予定は横に並べる
+    let cluster = null;
+    all.forEach((i) => {
+      if (!cluster || i.s >= cluster.end) cluster = { end: i.e, items: [], lanes: [] };
+      cluster.end = Math.max(cluster.end, i.e);
+      let l = cluster.lanes.findIndex((e) => e <= i.s);
+      if (l < 0) { l = cluster.lanes.length; cluster.lanes.push(0); }
+      cluster.lanes[l] = i.e;
+      i.lane = l; i.cluster = cluster;
+    });
+
+    let hours = "";
+    for (let h = from / 60; h <= to / 60; h++) {
+      hours += `<div class="tl-hour" style="top:${(h * 60 - from) * PX}px"><span>${h}:00</span></div>`;
+    }
+    const kindName = { event: "予定", routine: "ルーティン", plan: "Todo", sug: "提案" };
+    const blocks = all.map((i) => {
+      const n = i.cluster.lanes.length;
+      const h = Math.max((i.e - i.s) * PX, 24);
+      const attr = i.kind === "event" ? `data-event="${i.id}"` : i.kind === "routine" ? `data-routine="${i.id}"`
+        : i.kind === "plan" ? `data-plan="${i.id}"` : `data-sug="${i.id}"`;
+      const check = i.kind === "plan" ? `<button class="check sm ${i.done ? "on" : ""}" data-plan-check="${i.id}" aria-label="やった">${CHECK_SVG}</button>`
+        : i.kind === "routine" && ds <= ts ? `<button class="check sm ${i.done ? "on" : ""}" data-toggle-routine="${i.id}" data-date="${ds}" aria-label="やった">${CHECK_SVG}</button>` : "";
+      return `<div class="tl-block ${i.kind} ${i.done ? "done" : ""} ${h < 44 ? "short" : ""}" ${attr}
+          style="top:${(i.s - from) * PX}px;height:${h - 2}px;left:calc(46px + (100% - 50px) * ${i.lane} / ${n});width:calc((100% - 50px) / ${n} - 3px)">
+        ${check}<div class="tl-text"><b>${esc(i.title)}</b><small>${i.start}〜${i.end === "23:59" ? "24:00" : i.end}・${kindName[i.kind]}${i.sub ? "・" + esc(i.sub) : ""}</small></div></div>`;
+    }).join("");
+    let nowLine = "";
+    if (ds === ts) {
+      const n = new Date();
+      const m = n.getHours() * 60 + n.getMinutes();
+      if (m >= from && m <= to) nowLine = `<div class="tl-now" style="top:${(m - from) * PX}px"></div>`;
+    }
+
+    const free = freeSlots(ds, sug).reduce((s, [a, b]) => s + b - a, 0);
+    const plans = state.plans[ds] || [];
+    const plansNeedCal = plans.some((p) => !p.done && !p.calAdded) && ds >= ts;
+    const sugBox = sug.length ? `
+      <section class="sug-box">
+        <b>💡 おすすめのTodo ${sug.length}件</b>
+        <p class="note">期限が近いもの・遅れているものから、空き時間に入れました。点線の枠が提案です。いらないものはタップで外せます。</p>
+        <div class="actions"><button class="btn" data-sug-cancel>やめる</button><button class="btn primary" data-sug-accept>この内容で決定</button></div>
+      </section>`
+      : `<button class="btn primary wide" data-suggest>💡 ${ds === ts ? "今日" : "この日"}のTodoを提案して</button>`;
+
+    main.innerHTML = `
+      <div class="sched-head">
+        <button class="icon-btn sm" data-sched-move="-1" aria-label="前の日">‹</button>
+        <div><b>${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）</b>${ds === ts ? `<span class="badge cal">今日</span>` : `<button class="text-btn" data-sched-today>今日へ</button>`}</div>
+        <button class="icon-btn sm" data-sched-move="1" aria-label="次の日">›</button>
+      </div>
+      <p class="note sched-note">空き時間 ${durText(free) || "0分"}（${state.settings.wake}〜${state.settings.sleep}で計算）</p>
+      ${sugBox}
+      ${plansNeedCal && !sug.length ? `<button class="btn cal" data-plan-cal>🔔 Todoの時刻に通知する（カレンダーに追加）</button>` : ""}
+      ${allDay.length ? `<div class="allday">${allDay.map((ev) => `<button class="chip ev" data-event="${ev.id}">終日・${esc(ev.title)}</button>`).join("")}</div>` : ""}
+      <section class="timeline" style="height:${(to - from) * PX + 16}px">${hours}${blocks}${nowLine}</section>
+      ${!all.length ? `<p class="note" style="text-align:center;margin-top:10px">右下の ＋ から予定を入れるか、「Todoを提案して」を押してみてください</p>` : ""}`;
   }
 
   /* ---------- 操作 ---------- */
@@ -755,6 +1151,40 @@
       if (d.getMonth() !== calMonth.getMonth()) calMonth = firstOfMonth(d);
       render(); return;
     }
+    const go = e.target.closest("[data-goto]");
+    if (go) { tab = go.dataset.goto; if (tab === "schedule") schedDate = todayStr(); render(); window.scrollTo(0, 0); return; }
+    const os = e.target.closest("[data-open-schedule]");
+    if (os) { schedDate = os.dataset.openSchedule; tab = "schedule"; render(); window.scrollTo(0, 0); return; }
+    const ae = e.target.closest("[data-add-event]");
+    if (ae) { eventSheet(null, ae.dataset.addEvent); return; }
+    const evc = e.target.closest("[data-event]");
+    if (evc) { eventSheet(state.events.find((x) => x.id === evc.dataset.event)); return; }
+    const sm = e.target.closest("[data-sched-move]");
+    if (sm) { schedDate = ymd(addDays(parseDay(schedDate), Number(sm.dataset.schedMove))); render(); return; }
+    if (e.target.closest("[data-sched-today]")) { schedDate = todayStr(); render(); return; }
+    if (e.target.closest("[data-suggest]")) {
+      const blocks = suggest(schedDate);
+      suggestion = { date: schedDate, blocks };
+      if (!blocks.length) toast("入れられるTodoが見つかりませんでした");
+      render(); return;
+    }
+    if (e.target.closest("[data-sug-accept]")) {
+      state.plans[schedDate] = [...(state.plans[schedDate] || []), ...suggestion.blocks.map(({ reason, ...b }) => ({ ...b, reason }))];
+      const n = suggestion.blocks.length;
+      suggestion = null; save(); render(); toast(`${n}件のTodoをスケジュールに入れました`); return;
+    }
+    if (e.target.closest("[data-sug-cancel]")) { suggestion = null; render(); return; }
+    const sg = e.target.closest("[data-sug]");
+    if (sg) { suggestion.blocks = suggestion.blocks.filter((b) => b.id !== sg.dataset.sug); toast("提案から外しました"); render(); return; }
+    const pc = e.target.closest("[data-plan-check]");
+    if (pc) { togglePlan(schedDate, pc.dataset.planCheck); return; }
+    const pl = e.target.closest("[data-plan]");
+    if (pl) { planSheet(schedDate, pl.dataset.plan); return; }
+    if (e.target.closest("[data-plan-cal]")) {
+      const ps = (state.plans[schedDate] || []).filter((p) => !p.done);
+      openIcs(buildIcs(ps.flatMap((p) => planEvent(schedDate, p))), `schedule-${schedDate}.ics`);
+      ps.forEach((p) => (p.calAdded = true)); save(); render(); return;
+    }
     const ao = e.target.closest("[data-add-on]");
     if (ao) { taskSheet(null, ao.dataset.addOn); return; }
     const tc = e.target.closest("[data-task]");
@@ -774,7 +1204,11 @@
   }, { passive: true });
 
   document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
-  $("#fab").onclick = () => (tab === "routines" ? routineSheet() : taskSheet(null, tab === "calendar" ? calSelected : null));
+  $("#fab").onclick = () => {
+    if (tab === "routines") routineSheet();
+    else if (tab === "calendar" || tab === "schedule") addChooser(tab === "calendar" ? calSelected : schedDate);
+    else taskSheet();
+  };
   $("#menu-btn").onclick = menuSheet;
 
   // ホーム画面に追加していない iPhone の Safari ではヒントを出す
