@@ -1,0 +1,15 @@
+{
+  "name": "しんちょくノート",
+  "short_name": "しんちょく",
+  "description": "タスクの期限と毎日のルーティンを管理する進捗管理アプリ",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f9",
+  "theme_color": "#4f6bed",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
