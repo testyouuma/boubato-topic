@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>しんちょくノート</title>
+  <meta name="description" content="タスクの期限と毎日のルーティンを管理する進捗管理アプリ">
+  <meta name="theme-color" content="#4f6bed" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181d" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="しんちょく">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" href="icon-512.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="screen-title">今日</h1>
+    <button class="icon-btn" id="menu-btn" aria-label="設定とバックアップ">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+  </header>
+
+  <div id="install-hint" class="hint" hidden>
+    <strong>ホーム画面に追加してください</strong>
+    <span>Safari の共有ボタン <b>⬆︎</b> →「ホーム画面に追加」で、アプリとして使えます。</span>
+    <button class="text-btn" id="hint-close">閉じる</button>
+  </div>
+
+  <main id="main"></main>
+
+  <button class="fab" id="fab" aria-label="追加">
+    <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+  </button>
+
+  <nav class="tabs">
+    <button data-tab="today" class="active">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
+      <span>今日</span>
+    </button>
+    <button data-tab="tasks">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
+      <span>タスク</span>
+    </button>
+    <button data-tab="routines">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"/></svg>
+      <span>ルーティン</span>
+    </button>
+  </nav>
+
+  <dialog id="sheet" class="sheet"><form method="dialog" id="sheet-form"></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
