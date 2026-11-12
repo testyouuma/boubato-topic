@@ -105,3 +105,53 @@
 @keyframes kotan-pop { 0% { transform: scale(.5); } 60% { transform: scale(1.25); } 100% { transform: none; } }
 :root[data-look="kotan"] .section-title { justify-content: flex-start; gap: 6px; }
 :root[data-look="kotan"] .section-title > small, :root[data-look="kotan"] .section-title > .text-btn { margin-left: auto; }
+
+/* =========================================================
+   背景をオレンジに（カードは白のまま）
+   ========================================================= */
+:root[data-look="kotan"] body {
+  background-color: #ff8a2a;
+  background-image:
+    radial-gradient(80% 45% at 100% 0%, rgba(255, 220, 120, .55), transparent 70%),
+    radial-gradient(70% 40% at 0% 100%, rgba(255, 90, 40, .45), transparent 70%),
+    linear-gradient(170deg, #ff7a1a 0%, #ff9a3c 50%, #ffb04a 100%);
+  background-attachment: fixed;
+}
+:root[data-look="kotan"] .top { background: color-mix(in srgb, #ff7f20 85%, transparent); }
+:root[data-look="kotan"] .top h1 {
+  background: none; -webkit-background-clip: border-box; background-clip: border-box;
+  color: #fff; text-shadow: 0 2px 10px rgba(160, 60, 0, .25);
+}
+:root[data-look="kotan"] .top .icon-btn { box-shadow: 0 4px 14px rgba(160, 60, 0, .2); }
+/* オレンジの上に直接のる文字は白 */
+:root[data-look="kotan"] .section-title, :root[data-look="kotan"] .section-title small,
+:root[data-look="kotan"] main > .sub-title, :root[data-look="kotan"] main > .note,
+:root[data-look="kotan"] .sched-note, :root[data-look="kotan"] .sched-head b,
+:root[data-look="kotan"] .section-title .text-btn, :root[data-look="kotan"] .sched-head .text-btn {
+  color: #fff;
+}
+:root[data-look="kotan"] .section-title { text-shadow: 0 1px 6px rgba(160, 60, 0, .2); }
+:root[data-look="kotan"] .section-title::before { color: #fff3c4; }
+:root[data-look="kotan"] .sched-head .icon-btn { box-shadow: 0 4px 14px rgba(160, 60, 0, .2); }
+/* 追加ボタンはオレンジの背景で目立つよう白に */
+:root[data-look="kotan"] .fab { background: #fff; color: #ff7a1a; box-shadow: 0 10px 26px rgba(160, 60, 0, .35); }
+:root[data-look="kotan"] .tabs { background: color-mix(in srgb, #ffffff 86%, transparent); box-shadow: 0 10px 30px rgba(160, 60, 0, .25); }
+:root[data-look="kotan"] .summary { background: var(--surface); }
+
+/* テーマ「黒」：こげたオレンジ（夕暮れ）の背景 */
+@media (prefers-color-scheme: dark) {
+  :root[data-look="kotan"]:not([data-theme="light"]) body {
+    background-color: #5a2408;
+    background-image: radial-gradient(80% 45% at 100% 0%, rgba(255, 140, 40, .35), transparent 70%), linear-gradient(170deg, #7a3010 0%, #4a1c06 100%);
+  }
+  :root[data-look="kotan"]:not([data-theme="light"]) .top { background: color-mix(in srgb, #6a280c 85%, transparent); }
+  :root[data-look="kotan"]:not([data-theme="light"]) .fab { background: var(--grad); color: #fff; }
+  :root[data-look="kotan"]:not([data-theme="light"]) .tabs { background: color-mix(in srgb, #261a12 86%, transparent); }
+}
+:root[data-look="kotan"][data-theme="dark"] body {
+  background-color: #5a2408;
+  background-image: radial-gradient(80% 45% at 100% 0%, rgba(255, 140, 40, .35), transparent 70%), linear-gradient(170deg, #7a3010 0%, #4a1c06 100%);
+}
+:root[data-look="kotan"][data-theme="dark"] .top { background: color-mix(in srgb, #6a280c 85%, transparent); }
+:root[data-look="kotan"][data-theme="dark"] .fab { background: var(--grad); color: #fff; }
+:root[data-look="kotan"][data-theme="dark"] .tabs { background: color-mix(in srgb, #261a12 86%, transparent); }

@@ -1226,7 +1226,7 @@
     const modern = look === "modern";
     document.documentElement.dataset.look = look;
     const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", look === "cyber" ? "#05060d" : look === "kotan" ? (dark ? "#1a120c" : "#fff8f1") : modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", look === "cyber" ? "#05060d" : look === "kotan" ? (dark ? "#6a280c" : "#ff7f20") : modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
   }
   applyTheme();
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
