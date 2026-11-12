@@ -421,3 +421,13 @@ input[type=range] { width: 100%; accent-color: var(--primary); height: 28px; }
     color-scheme: dark;
   }
 :root[data-theme="dark"] { --ev: #4cc3e6; --ev-soft: #163843; --rt: #4cd29a; --rt-soft: #173528; }
+
+/* Todoの並び替え */
+.ro-list { display: grid; gap: 8px; }
+.ro-row { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 14px; padding: 8px 10px; }
+.ro-no { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+.ro-body { flex: 1; min-width: 0; display: grid; }
+.ro-body b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ro-body small { color: var(--muted); font-size: 12px; }
+.ro-row .icon-btn { flex: none; width: 36px; height: 36px; font-size: 18px; }
+.ro-row .icon-btn:disabled { opacity: .3; }
