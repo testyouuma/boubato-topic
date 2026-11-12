@@ -360,3 +360,38 @@ main { position: relative; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .field .step input[type=text] { border: 0; background: transparent; min-height: 0; padding: 6px 0; border-radius: 0; }
+
+/* テーマで「黒」を選んだとき */
+:root[data-theme="dark"] {
+    --paper: #23262b;
+    --rule: rgba(160, 190, 230, .10);
+    --ink: #f3eedf;
+    --hl: #e6bf1e;
+    --pen-red: #ff6b5f;
+    --pen-blue: #7aa7ff;
+    --pen-green: #4fd39a;
+    --bg: var(--paper);
+    --surface: #2d3137;
+    --surface-2: #383c43;
+    --text: var(--ink);
+    --muted: #b0a995;
+    --line: #4a4e56;
+    --primary: var(--pen-blue);
+    --primary-soft: #2b3a5c;
+    --on-primary: #10151f;
+    --ok: var(--pen-green);
+    --ok-soft: #1f3a2e;
+    --warn: #ffb547;
+    --warn-soft: #3d2f15;
+    --danger: var(--pen-red);
+    --danger-soft: #45231f;
+    --ev: #5fd0ef;
+    --ev-soft: #1b3a44;
+    --rt: var(--pen-green);
+    --rt-soft: #1f3a2e;
+    --hard: 3px 3px 0 #000;
+    color-scheme: dark;
+  }
+:root[data-theme="dark"] .hint { background: #5a5126; color: #fff6cf; }
+:root[data-theme="dark"] .sug-box { background: #5a5126; color: #fff6cf; } :root[data-theme="dark"] .sug-box .note { color: #f1e6b8; }
+.seg.seg3 { grid-template-columns: 1fr 1fr 1fr; }

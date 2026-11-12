@@ -45,7 +45,7 @@
     const cutoff = ymd(addDays(new Date(), -60));
     const plans = {};
     Object.entries(d.plans || {}).forEach(([k, v]) => { if (k >= cutoff && v.length) plans[k] = v; });
-    const settings = { wake: "07:00", sleep: "23:00", ...(d.settings || {}) };
+    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", ...(d.settings || {}) };
     return { tasks, routines, events, plans, settings };
   }
   function save() {
@@ -330,7 +330,7 @@
         <div class="date">${now.getMonth() + 1}月${now.getDate()}日（${WD[now.getDay()]}）</div>
         <div class="ring-row">
           <div class="ring"><svg viewBox="0 0 84 84"><circle class="bg" cx="42" cy="42" r="36"/>
-            <circle class="fg" cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/></svg>
+            <circle class="fg" ${pct ? "" : 'opacity="0"'} cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/></svg>
             <div class="pct">${total ? pct + "%" : "—"}</div></div>
           <div class="ring-text">
             <span>今日の達成</span>
@@ -710,6 +710,13 @@
     const n = pendingTasks.length + pendingRoutines.length + pendingEvents.length;
     openSheet(`
       <h2>メニュー</h2>
+      <div class="field"><span class="label">テーマ</span>
+        <div class="seg seg3">
+          <button type="button" data-theme-set="auto">📱 自動</button>
+          <button type="button" data-theme-set="light">☀️ 白</button>
+          <button type="button" data-theme-set="dark">🌙 黒</button>
+        </div>
+        <p class="note">「自動」は iPhone のダークモード設定に合わせます</p></div>
       <div class="field"><span class="label">1日の活動時間（Todo提案はこの間で考えます）</span>
         <div class="row2 time-range"><label class="mini">起きる<input type="time" id="m-wake" value="${state.settings.wake}"></label>
           <label class="mini">寝る<input type="time" id="m-sleep" value="${state.settings.sleep}"></label></div></div>
@@ -726,6 +733,11 @@
     (f) => {
       f.onsubmit = (e) => e.preventDefault();
       $("#m-close", f).onclick = closeSheet;
+      const paintTheme = () => f.querySelectorAll("[data-theme-set]").forEach((b) => b.classList.toggle("on", b.dataset.themeSet === state.settings.theme));
+      paintTheme();
+      f.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
+        state.settings.theme = b.dataset.themeSet; save(); applyTheme(); paintTheme();
+      });
       const saveTimes = () => {
         state.settings.wake = $("#m-wake", f).value || "07:00";
         state.settings.sleep = $("#m-sleep", f).value || "23:00";
@@ -1186,6 +1198,17 @@
       <section class="timeline" style="height:${(to - from) * PX + 16}px">${hours}${blocks}${dueLines}${nowLine}</section>
       ${!all.length ? `<p class="note" style="text-align:center;margin-top:10px">右下の ＋ から予定を入れるか、「Todoを提案して」を押してみてください</p>` : ""}`;
   }
+
+  /* ---------- テーマ（自動・白・黒） ---------- */
+  function applyTheme() {
+    const t = state.settings.theme;
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    else delete document.documentElement.dataset.theme;
+    const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", dark ? "#23262b" : "#fffbea"));
+  }
+  applyTheme();
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
 
   /* ---------- 演出（パラパラ漫画っぽい動き） ---------- */
   const reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);

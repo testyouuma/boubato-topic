@@ -399,3 +399,25 @@ input[type=range] { width: 100%; accent-color: var(--primary); height: 28px; }
 .lg.task { background: var(--primary-soft); border: 1.5px solid var(--primary); }
 .lg.over { background: var(--danger-soft); border: 1.5px solid var(--danger); }
 .lg.long { background: var(--primary); }
+
+/* テーマで「黒」を選んだとき */
+:root[data-theme="dark"] {
+    --bg: #101216;
+    --surface: #1b1e25;
+    --surface-2: #252932;
+    --text: #eceef3;
+    --muted: #9aa0b0;
+    --line: #2c303a;
+    --primary: #8197ff;
+    --primary-soft: #262d4d;
+    --on-primary: #0f1430;
+    --ok: #4cd29a;
+    --ok-soft: #173528;
+    --warn: #ffb547;
+    --warn-soft: #3a2c14;
+    --danger: #ff6b7d;
+    --danger-soft: #3d1c22;
+    --shadow: none;
+    color-scheme: dark;
+  }
+:root[data-theme="dark"] { --ev: #4cc3e6; --ev-soft: #163843; --rt: #4cd29a; --rt-soft: #173528; }
