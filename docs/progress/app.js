@@ -243,10 +243,12 @@
   const main = $("#main");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const TITLES_EN = { today: "TODAY", schedule: "SCHEDULE", tasks: "TASKS", calendar: "CALENDAR", routines: "ROUTINES" };
   const TITLES = { today: "今日", schedule: "スケジュール", tasks: "タスク", calendar: "カレンダー", routines: "ルーティン" };
 
   function render() {
     $("#screen-title").textContent = TITLES[tab];
+    $("#screen-title").dataset.en = TITLES_EN[tab];
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
     ({ today: renderToday, schedule: renderSchedule, tasks: renderTasks, calendar: renderCalendar, routines: renderRoutines })[tab]();
   }
@@ -711,10 +713,12 @@
     openSheet(`
       <h2>メニュー</h2>
       <div class="field"><span class="label">見た目</span>
-        <div class="seg">
+        <div class="seg seg3">
           <button type="button" data-look-set="memo">📒 メモ帳</button>
           <button type="button" data-look-set="modern">✨ モダン</button>
-        </div></div>
+          <button type="button" data-look-set="cyber">🌐 サイバー</button>
+        </div>
+        <p class="note" id="m-look-note"></p></div>
       <div class="field"><span class="label">テーマ</span>
         <div class="seg seg3">
           <button type="button" data-theme-set="auto">📱 自動</button>
@@ -740,10 +744,13 @@
       $("#m-close", f).onclick = closeSheet;
       const paintTheme = () => f.querySelectorAll("[data-theme-set]").forEach((b) => b.classList.toggle("on", b.dataset.themeSet === state.settings.theme));
       paintTheme();
-      const paintLook = () => f.querySelectorAll("[data-look-set]").forEach((b) => b.classList.toggle("on", b.dataset.lookSet === state.settings.look));
+      const paintLook = () => {
+        f.querySelectorAll("[data-look-set]").forEach((b) => b.classList.toggle("on", b.dataset.lookSet === state.settings.look));
+        $("#m-look-note", f).textContent = state.settings.look === "cyber" ? "サイバーはいつも暗い配色です（テーマの白・黒は使われません）" : "";
+      };
       paintLook();
       f.querySelectorAll("[data-look-set]").forEach((b) => b.onclick = () => {
-        state.settings.look = b.dataset.lookSet; save(); applyTheme(); paintLook(); render(); fx.enter();
+        state.settings.look = b.dataset.lookSet; save(); applyTheme(); paintLook(); render(); fx.enter(); fx.glitch();
       });
       f.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
         state.settings.theme = b.dataset.themeSet; save(); applyTheme(); paintTheme();
@@ -1214,17 +1221,19 @@
     const t = state.settings.theme;
     if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
-    const modern = state.settings.look === "modern";
-    document.documentElement.dataset.look = modern ? "modern" : "memo";
+    const look = ["modern", "cyber"].includes(state.settings.look) ? state.settings.look : "memo";
+    const modern = look === "modern";
+    document.documentElement.dataset.look = look;
     const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", look === "cyber" ? "#05060d" : modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
   }
   applyTheme();
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
 
   /* ---------- 演出（パラパラ漫画っぽい動き） ---------- */
   const reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  const INKS = ["#e8413a", "#2f6fd6", "#ffbf1a", "#22a06b", "#ff6fb0"];
+  const INKS_MEMO = ["#e8413a", "#2f6fd6", "#ffbf1a", "#22a06b", "#ff6fb0"];
+  const INKS_CYBER = ["#00e5ff", "#ff2bd6", "#39ff9f", "#ffd23d", "#7a5cff"];
   const PRAISE = ["できた！", "えらい！", "ナイス！", "すごい！", "やったね！"];
   let enterTimer, slideTimer;
   const fx = {
@@ -1245,15 +1254,24 @@
       for (let i = 0; i < n; i++) {
         const a = (360 / n) * i + Math.random() * 18;
         const dist = (big ? 54 : 34) + Math.random() * 20;
-        html += `<i class="b${i % 3}" style="--a:${a}deg;--d:${dist}px;--c:${INKS[i % INKS.length]}"></i>`;
+        const inks = document.documentElement.dataset.look === "cyber" ? INKS_CYBER : INKS_MEMO;
+        html += `<i class="b${i % 3}" style="--a:${a}deg;--d:${dist}px;--c:${inks[i % inks.length]}"></i>`;
       }
       el.innerHTML = html;
       document.body.appendChild(el);
       setTimeout(() => el.remove(), 900);
     },
+    // サイバーのとき、見出しがノイズで一瞬乱れる
+    glitch() {
+      if (reduceMotion || document.documentElement.dataset.look !== "cyber") return;
+      const h = $("#screen-title");
+      h.classList.remove("glitch"); void h.offsetWidth; h.classList.add("glitch");
+      setTimeout(() => h.classList.remove("glitch"), 500);
+    },
     // ハンコがポンと押される
     stamp(text) {
       if (reduceMotion) return;
+      fx.glitch();
       document.querySelectorAll(".stamp").forEach((x) => x.remove());
       const el = document.createElement("div");
       el.className = "stamp";
@@ -1293,6 +1311,7 @@
     render();
     window.scrollTo(0, 0);
     fx.onion(old);
+    fx.glitch();
   }
 
   /* ---------- 操作 ---------- */
