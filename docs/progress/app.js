@@ -1338,13 +1338,31 @@
     return kotanCache;
   }
   function kotanHero({ line, mood }) {
-    const src = kotanImg[mood] || kotanImg.normal;
-    const img = src ? `<img src="${src}" alt="コタン">` : `<span class="kotan-ph" aria-hidden="true">🐯</span>`;
-    return `<section class="kotan-hero">
+    const petting = Date.now() < kotanPetUntil;
+    if (petting) line = kotanPetLine;
+    const src = (petting && (kotanImg.happyface || kotanImg.happy)) || kotanImg[mood] || kotanImg.normal;
+    const img = src ? `<img src="${src}" alt="コタン" draggable="false">` : `<span class="kotan-ph" aria-hidden="true">🐯</span>`;
+    return `<section class="kotan-hero ${petting ? "petted" : ""}">
       <div class="kotan-bubble" data-kotan-talk>${esc(line)}</div>
       <button class="kotan-pic" data-kotan-talk aria-label="コタン">${img}</button>
     </section>`;
   }
+  // なでられたとき
+  const KOTAN_PET_LINES = ["えへへー", "くすぐったいー", "もっとなでてー", "ごろごろー", "きもちいいー", "ふにゃー",
+    "なでなでうれしいー", "えへへ もっとー", "しあわせー", "ごろごろごろー"];
+  let kotanPetUntil = 0, kotanPetLine = "", kotanPetTimer = 0;
+  function kotanPetted(x, y) {
+    let line = pick(KOTAN_PET_LINES);
+    let n = 0;
+    while (line === kotanPetLine && n++ < 5) line = pick(KOTAN_PET_LINES);
+    kotanPetLine = line;
+    kotanPetUntil = Date.now() + 2800;
+    render();
+    fx.hearts(x, y);
+    clearTimeout(kotanPetTimer);
+    kotanPetTimer = setTimeout(() => { if (tab === "today" && !sheet.open) render(); }, 2900);
+  }
+
   // 完了したときなどに、下からひょこっと出てくる
   function kotanPop(text) {
     document.querySelectorAll(".kotan-pop").forEach((x) => x.remove());
@@ -1358,7 +1376,7 @@
   }
 
   // コタンの画像は、このiPhoneの中（IndexedDB）にだけ保存する
-  const kotanImg = { normal: "", happy: "", sad: "", sleep: "" };
+  const kotanImg = { normal: "", happy: "", sad: "", sleep: "", happyface: "" };
   const imgDB = {
     open() {
       return new Promise((res, rej) => {
@@ -1383,8 +1401,8 @@
   };
   // アプリに入っているコタンの画像（docs/progress/kotan/ に normal.gif・happy.gif などを置く）
   const KOTAN_EXTS = ["gif", "png", "webp", "apng"];
-  const MOODS = ["normal", "happy", "sad", "sleep"];
-  const bundled = { normal: "", happy: "", sad: "", sleep: "" };
+  const MOODS = ["normal", "happy", "sad", "sleep", "happyface"];
+  const bundled = { normal: "", happy: "", sad: "", sleep: "", happyface: "" };
   let bundledChecked = false;
   async function findBundled() {
     if (bundledChecked) return;
@@ -1413,6 +1431,7 @@
     }
     kotanImg.sad = bundled.sad;
     kotanImg.sleep = bundled.sleep;
+    kotanImg.happyface = bundled.happyface;
   }
 
   /* ---------- テーマ（自動・白・黒） ---------- */
@@ -1442,6 +1461,23 @@
       const b = e && e.target && e.target.closest && e.target.closest("button, .card, .dt-row");
       if (b) { const r = b.getBoundingClientRect(); return [r.left + Math.min(r.width / 2, 40), r.top + r.height / 2]; }
       return [(e && e.clientX) || innerWidth / 2, (e && e.clientY) || innerHeight / 2];
+    },
+    // ハートがふわっと浮かぶ（なでたとき）
+    hearts(x, y) {
+      if (reduceMotion) return;
+      for (let i = 0; i < 7; i++) {
+        const h = document.createElement("i");
+        h.className = "pet-heart";
+        h.textContent = "♥";
+        h.style.left = (x + (Math.random() - .5) * 70) + "px";
+        h.style.top = (y + (Math.random() - .5) * 30) + "px";
+        h.style.setProperty("--dx", `${(Math.random() - .5) * 60}px`);
+        h.style.setProperty("--s", `${.8 + Math.random() * .8}`);
+        h.style.animationDelay = `${i * 70}ms`;
+        h.style.color = ["#ff6fa0", "#ff8a3d", "#ff4f7a", "#ffb02e"][i % 4];
+        document.body.appendChild(h);
+        setTimeout(() => h.remove(), 1600);
+      }
     },
     // 線・星・丸がはじける
     burst(x, y, big) {
@@ -1574,6 +1610,8 @@
       render(); return;
     }
     if (e.target.closest("[data-kotan-talk]")) {
+      if (petSuppressClick) { petSuppressClick = false; return; }
+      kotanPetUntil = 0;
       kotanForce = true; render();
       const pic = main.querySelector(".kotan-pic");
       if (pic) pic.classList.add("hop");
@@ -1635,6 +1673,33 @@
     const rc = e.target.closest("[data-routine]");
     if (rc) { routineSheet(state.routines.find((x) => x.id === rc.dataset.routine)); }
   });
+
+  // コタンをなでる：画像の上で指（マウス）を行ったり来たり動かす
+  let pet = null, petSuppressClick = false;
+  main.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".kotan-pic")) return;
+    pet = { lx: e.clientX, ly: e.clientY, dist: 0, turns: 0, dir: 0, done: false };
+  });
+  main.addEventListener("pointermove", (e) => {
+    if (!pet || pet.done) return;
+    const dx = e.clientX - pet.lx, dy = e.clientY - pet.ly;
+    const step = Math.hypot(dx, dy);
+    if (step < 3) return;
+    const d = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : Math.sign(dy) * 2;
+    if (pet.dir && d !== pet.dir) pet.turns++;
+    pet.dir = d; pet.dist += step; pet.lx = e.clientX; pet.ly = e.clientY;
+    if (pet.dist > 140 || (pet.turns >= 2 && pet.dist > 60)) {
+      pet.done = true;
+      kotanPetted(e.clientX, e.clientY);
+    }
+  });
+  // なでた直後の「タップ」だけは無視する（なでている間に絵が描き直されて、クリックが来ないこともあるので少し待って解除）
+  const endPet = () => {
+    if (pet && pet.done) { petSuppressClick = true; setTimeout(() => { petSuppressClick = false; }, 80); }
+    pet = null;
+  };
+  window.addEventListener("pointerup", endPet);
+  window.addEventListener("pointercancel", endPet);
 
   // カレンダーは左右スワイプでも月を移動
   let touchX = null;
