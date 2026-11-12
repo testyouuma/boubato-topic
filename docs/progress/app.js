@@ -725,7 +725,7 @@
           <button type="button" data-look-set="kotan">🍊 コタン</button>
         </div>
         <p class="note" id="m-look-note"></p></div>
-      <div class="field" id="m-kotan"><span class="label">🐯 コタンの画像（透過PNG・GIFもOK）</span>
+      <div class="field" id="m-kotan"><span class="label">🐯 コタンの画像をこのiPhoneだけ差し替える（任意）</span>
         <div class="kotan-slots">
           <div class="kslot"><div class="kthumb" id="kt-normal"></div><b>ふだん</b>
             <div class="kbtns"><button type="button" class="chip" data-kimg-pick="normal">えらぶ</button><button type="button" class="chip" data-kimg-del="normal">けす</button></div></div>
@@ -733,7 +733,7 @@
             <div class="kbtns"><button type="button" class="chip" data-kimg-pick="happy">えらぶ</button><button type="button" class="chip" data-kimg-del="happy">けす</button></div></div>
         </div>
         <input type="file" id="kt-file" accept="image/*" hidden>
-        <p class="note">画像はこのiPhoneの中だけに保存されます（バックアップのファイルには入りません）</p></div>
+        <p class="note">ふだんはアプリに入っているコタンの画像を使います。ここで選ぶと、このiPhoneだけその画像に変わります（「けす」で元に戻ります）</p></div>
       <div class="field"><span class="label">テーマ</span>
         <div class="seg seg3">
           <button type="button" data-theme-set="auto">📱 自動</button>
@@ -1342,13 +1342,34 @@
     set: (k, v) => imgDB.run("readwrite", (s) => s.put(v, k)),
     del: (k) => imgDB.run("readwrite", (s) => s.delete(k)),
   };
+  // アプリに入っているコタンの画像（docs/progress/kotan/ に normal.gif・happy.gif などを置く）
+  const KOTAN_EXTS = ["gif", "png", "webp", "apng"];
+  const bundled = { normal: "", happy: "" };
+  let bundledChecked = false;
+  async function findBundled() {
+    if (bundledChecked) return;
+    bundledChecked = true;
+    for (const slot of ["normal", "happy"]) {
+      for (const ext of KOTAN_EXTS) {
+        const url = `kotan/${slot}.${ext}`;
+        try {
+          const r = await fetch(url, { method: "HEAD", cache: "no-cache" });
+          if (r.ok) { bundled[slot] = url; break; }
+        } catch (e) { /* オフラインなど */ }
+      }
+    }
+  }
+  // 自分で選んだ画像（このiPhoneだけ）があればそれを、なければアプリに入っている画像を使う
+  const ownURL = { normal: "", happy: "" };
   async function loadKotanImgs() {
+    await findBundled();
     for (const slot of ["normal", "happy"]) {
       try {
         const blob = await imgDB.get(slot);
-        if (kotanImg[slot]) URL.revokeObjectURL(kotanImg[slot]);
-        kotanImg[slot] = blob ? URL.createObjectURL(blob) : "";
-      } catch (e) { kotanImg[slot] = ""; }
+        if (ownURL[slot]) URL.revokeObjectURL(ownURL[slot]);
+        ownURL[slot] = blob ? URL.createObjectURL(blob) : "";
+      } catch (e) { ownURL[slot] = ""; }
+      kotanImg[slot] = ownURL[slot] || bundled[slot];
     }
   }
 
