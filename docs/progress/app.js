@@ -1019,9 +1019,10 @@
     }
     return [from, to];
   }
-  function freeSlots(ds, extraBusy = []) {
+  function freeSlots(ds, extraBusy = [], excludeIds) {
     const [from, to] = dayWindow(ds);
-    const busy = [...dayItems(ds), ...extraBusy].map((i) => [i.s, i.e]).sort((a, b) => a[0] - b[0]);
+    const busy = [...dayItems(ds).filter((i) => !(excludeIds && excludeIds.has(i.id))), ...extraBusy]
+      .map((i) => [i.s, i.e]).sort((a, b) => a[0] - b[0]);
     const slots = [];
     let cur = from;
     busy.forEach(([s, e]) => {
@@ -1187,6 +1188,82 @@
     </section>`;
   }
 
+  // 決めた順番どおりに、空き時間へ前から詰めて入れ直す（入りきらないものは分けて入れる）
+  function packInOrder(ds, list, excludeIds) {
+    const slots = freeSlots(ds, [], excludeIds);
+    const GAP = 10, MIN_PART = 30;
+    let cursor = 0;
+    const out = [];
+    for (const it of list) {
+      let rest = it.dur;
+      const parts = [];
+      for (const sl of slots) {
+        const st = Math.max(sl[0], cursor);
+        const len = sl[1] - st;
+        if (len <= 0) continue;
+        if (len >= rest) { parts.push([st, rest]); cursor = st + rest + GAP; rest = 0; break; }
+        if (len >= MIN_PART) { parts.push([st, len]); cursor = sl[1]; rest -= len; }
+      }
+      parts.forEach(([st, d], i) => out.push({ ...it, id: i ? uid() : it.id, start: fmtMin(st), end: fmtMin(st + d),
+        title: it.title + (parts.length > 1 ? `（${i + 1}/${parts.length}）` : "") }));
+      if (!parts.length) out.push({ ...it, unplaced: true });
+    }
+    return out;
+  }
+
+  function reorderSheet(ds) {
+    const useSug = suggestion && suggestion.date === ds && suggestion.blocks.length;
+    const src = useSug ? suggestion.blocks : (state.plans[ds] || []).filter((p) => !p.done);
+    let list = src.slice().sort((a, b) => a.start.localeCompare(b.start))
+      .map((b) => ({ ...b, dur: endMin(b.start, b.end) - toMin(b.start) }));
+    const paint = (f) => {
+      $("#ro-list", f).innerHTML = list.map((it, i) => `
+        <div class="ro-row">
+          <span class="ro-no">${i + 1}</span>
+          <div class="ro-body"><b>${esc(it.title)}</b><small>${durText(it.dur)}</small></div>
+          <button type="button" class="icon-btn sm" data-ro-up="${i}" ${i ? "" : "disabled"} aria-label="上へ">↑</button>
+          <button type="button" class="icon-btn sm" data-ro-down="${i}" ${i < list.length - 1 ? "" : "disabled"} aria-label="下へ">↓</button>
+        </div>`).join("");
+    };
+    openSheet(`
+      <h2>${say("Todoの順番", "じゅんばんかえるー")}</h2>
+      <p class="note">${useSug ? "提案中のTodo" : "決定したTodo"}を、上から順に空き時間へ詰めて入れ直します。予定やルーティンの時間は避けます。</p>
+      <div id="ro-list" class="ro-list"></div>
+      <div class="actions"><button type="button" class="btn" id="ro-cancel">キャンセル</button>
+        <button type="submit" class="btn primary">この順で詰める</button></div>`,
+    (f) => {
+      paint(f);
+      $("#ro-cancel", f).onclick = closeSheet;
+      $("#ro-list", f).addEventListener("click", (e) => {
+        const up = e.target.closest("[data-ro-up]"), dn = e.target.closest("[data-ro-down]");
+        const i = Number((up || dn || {}).dataset?.roUp ?? (up || dn || {}).dataset?.roDown);
+        if (!up && !dn) return;
+        const j = up ? i - 1 : i + 1;
+        if (j < 0 || j >= list.length) return;
+        [list[i], list[j]] = [list[j], list[i]];
+        paint(f);
+      });
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        if (useSug) {
+          suggestion.blocks = packInOrder(ds, list).filter((b) => !b.unplaced).map(({ dur, unplaced, ...b }) => b);
+        } else {
+          const ids = new Set(list.map((b) => b.id));
+          const packed = packInOrder(ds, list, ids);
+          const keep = (state.plans[ds] || []).filter((p) => !ids.has(p.id));
+          const moved = packed.filter((b) => !b.unplaced).map(({ dur, unplaced, ...b }) => {
+            const old = list.find((x) => x.id === b.id);
+            return { ...b, calAdded: !!(old && old.calAdded && old.start === b.start && old.end === b.end) };
+          });
+          state.plans[ds] = [...keep, ...moved];
+          save();
+        }
+        closeSheet(); render(); fx.enter();
+        toast(say("この順番で詰めました", "このじゅんでつめたよー"));
+      };
+    });
+  }
+
   function renderSchedule() {
     const ds = schedDate;
     const d = parseDay(ds);
@@ -1259,6 +1336,7 @@
         <b>💡 ${say(`${suggestion.auto ? "空き時間にタスクを入れてみました" : "おすすめのTodo"}（${sug.length}件）`, `あいてるとこに${sug.length}こいれてみたよー`)}</b>
         <p class="note">${say("期限が近いもの・遅れているものから入れています。点線の枠が提案です。いらないものはタップで外して、「決定」で確定します。", "きげんちかいのからいれといた いらないのはタップでけしてね よかったらけっていおしてー")}</p>
         <div class="actions"><button class="btn" data-sug-cancel>今日はいいや</button><button class="btn primary" data-sug-accept>この内容で決定</button></div>
+        ${sug.length > 1 ? `<button class="text-btn" data-reorder style="justify-self:center">↕ 順番を並び替える</button>` : ""}
       </section>`
       : `<button class="btn primary wide" data-suggest>💡 ${ds === ts ? "今日" : "この日"}のTodoを提案して</button>`;
 
@@ -1270,6 +1348,7 @@
       </div>
       <p class="note sched-note">空き時間 ${durText(free) || "0分"}（${state.settings.wake}〜${state.settings.sleep}で計算）</p>
       ${sugBox}
+      ${!sug.length && plans.filter((p) => !p.done).length > 1 ? `<button class="btn wide" data-reorder>↕ Todoの順番を並び替える</button>` : ""}
       ${plansNeedCal && !sug.length ? `<button class="btn cal" data-plan-cal>🔔 Todoの時刻に通知する</button>` : ""}
       ${allDay.length ? `<div class="allday">${allDay.map((ev) => `<button class="chip ev" data-event="${ev.id}">終日・${esc(ev.title)}</button>`).join("")}</div>` : ""}
       ${dayTaskPanel(ds, sug)}
@@ -1642,6 +1721,7 @@
       suggestion = null; save(); render(); fx.burst(at[0], at[1], true); fx.stamp("けってい！"); return;
     }
     if (e.target.closest("[data-sug-cancel]")) { autoOff.add(schedDate); suggestion = null; render(); return; }
+    if (e.target.closest("[data-reorder]")) { reorderSheet(schedDate); return; }
     const pt = e.target.closest("[data-place]");
     if (pt) {
       const bl = suggest(schedDate, pt.dataset.place);
