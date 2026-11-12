@@ -851,7 +851,9 @@
   }
 
   /* ---------- 予定（イベント） ---------- */
-  const EST_OPTS = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 420, 480, 600, 720];
+  const EST_OPTS = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 420, 480, 600, 720,
+    960, 1200, 1440, 1800, 2400, 3000, 3600, 4800, 6000]; // 〜100時間
+  const DAY_CAP = 480; // 1日に提案するのは1つのタスクにつき最大8時間
   function durText(m) { return m < 60 ? `${m}分` : `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + "分" : ""}`; }
   const fmtMin = (m) => { m = Math.min(Math.max(m, 0), 1439); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
   const icsDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
@@ -1055,7 +1057,8 @@
         const s = t.steps.find((x) => !x.done);
         if (s) { title = `${t.title}：${s.title}`; stepId = s.id; }
       }
-      return { t, score, reason, title, stepId, dur: t.est || 60 };
+      const full = t.est || 60;
+      return { t, score, reason, title, stepId, dur: Math.min(full, DAY_CAP), full };
     }).filter((c) => !planned.has(`${c.t.id}|${c.stepId}`) && (!only || c.t.id === only)).sort((a, b) => b.score - a.score);
 
     const slots = freeSlots(ds);
@@ -1083,12 +1086,12 @@
       }
       if (!parts.length) continue;
       const total = parts.reduce((a, [, d]) => a + d, 0);
-      const short = total < c.dur;
+      const short = total < c.full;
       parts.forEach(([sl, d], i) => {
         const label = parts.length > 1 ? `（${i + 1}/${parts.length}）` : "";
         const last = i === parts.length - 1;
         out.push({ id: uid(), taskId: c.t.id, stepId: c.stepId, title: c.title + label,
-          reason: c.reason + (short && last ? `・のこり${durText(c.dur - total)}` : ""),
+          reason: c.reason + (short && last ? `・のこり${durText(c.full - total)}` : ""),
           start: fmtMin(sl[0]), end: fmtMin(sl[0] + d), done: false });
         sl[0] += d + GAP;
       });
