@@ -1233,7 +1233,7 @@
   /* ---------- 演出（パラパラ漫画っぽい動き） ---------- */
   const reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const INKS_MEMO = ["#e8413a", "#2f6fd6", "#ffbf1a", "#22a06b", "#ff6fb0"];
-  const INKS_CYBER = ["#00e5ff", "#ff2bd6", "#39ff9f", "#ffd23d", "#7a5cff"];
+  const INKS_CYBER = ["#00e5ff", "#7df9ff", "#2f8bff", "#b8f6ff", "#39ff9f"];
   const PRAISE = ["できた！", "えらい！", "ナイス！", "すごい！", "やったね！"];
   let enterTimer, slideTimer;
   const fx = {

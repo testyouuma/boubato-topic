@@ -1,5 +1,5 @@
 /* しんちょくノート：サイバーな見た目（メニューの「見た目 → サイバー」）
- * 黒い背景にネオンの水色とピンク、光るグリッド、半透明のパネル、四隅の角飾り。
+ * 黒い背景にネオンの水色（青系でまとめる）、光るグリッド、半透明のパネル、四隅の角飾り。
  * 形の多くはモダン（modern.css）と共通で、ここでは色と光と演出を上書きする。常に暗い配色 */
 
 :root[data-look="cyber"] {
@@ -11,7 +11,7 @@
   --muted: #7e8ab4;
   --line: rgba(0, 240, 255, .16);
   --primary: #00e5ff;
-  --primary-2: #ff2bd6;
+  --primary-2: #2f8bff;
   --primary-soft: rgba(0, 229, 255, .12);
   --on-primary: #05060d;
   --hl: #00e5ff;
@@ -28,10 +28,10 @@
   --ev-soft: rgba(77, 155, 255, .14);
   --rt: #39ff9f;
   --rt-soft: rgba(57, 255, 159, .10);
-  --grad: linear-gradient(100deg, #00e5ff, #7a5cff 55%, #ff2bd6);
+  --grad: linear-gradient(100deg, #00f0ff, #00c2ff 50%, #2f8bff);
   --neon: 0 0 0 1px rgba(0, 229, 255, .28), 0 0 18px rgba(0, 229, 255, .10), inset 0 0 24px rgba(0, 229, 255, .04);
   --soft: var(--neon);
-  --soft-lg: 0 0 24px rgba(0, 229, 255, .45), 0 0 48px rgba(255, 43, 214, .25);
+  --soft-lg: 0 0 24px rgba(0, 229, 255, .45), 0 0 48px rgba(47, 139, 255, .25);
   --mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
   --disp: "Orbitron", "Zen Kaku Gothic New", -apple-system, sans-serif;
   /* パネルの四隅の角飾り（ゲームのHUD風） */
@@ -48,7 +48,7 @@
   font-family: "Zen Kaku Gothic New", -apple-system, "Hiragino Sans", sans-serif;
   background-color: var(--bg);
   background-image:
-    radial-gradient(60% 40% at 85% 0%, rgba(255, 43, 214, .16), transparent 70%),
+    radial-gradient(60% 40% at 85% 0%, rgba(47, 139, 255, .16), transparent 70%),
     radial-gradient(60% 45% at 0% 30%, rgba(0, 229, 255, .14), transparent 70%),
     linear-gradient(rgba(0, 229, 255, .06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 229, 255, .06) 1px, transparent 1px);
@@ -71,17 +71,17 @@
 }
 :root[data-look="cyber"] .top h1::before {
   content: "> " attr(data-en) "_"; font-family: var(--mono); font-size: 12px; font-weight: 400;
-  letter-spacing: .2em; color: var(--primary-2); text-shadow: 0 0 8px rgba(255, 43, 214, .8);
+  letter-spacing: .2em; color: var(--primary-2); text-shadow: 0 0 8px rgba(47, 139, 255, .8);
   animation: caret 1.1s step-end infinite;
 }
 @keyframes caret { 50% { opacity: .35; } }
 :root[data-look="cyber"] .top h1.glitch { animation: glitch .45s linear; }
 @keyframes glitch {
-  0%   { text-shadow: 2px 0 #ff2bd6, -2px 0 #00e5ff; transform: translate(0); }
-  20%  { text-shadow: -3px 1px #ff2bd6, 3px -1px #00e5ff; transform: translate(-2px, 1px) skewX(-6deg); }
-  40%  { text-shadow: 3px -1px #ff2bd6, -3px 1px #00e5ff; transform: translate(2px, -1px); clip-path: inset(20% 0 30% 0); }
-  60%  { text-shadow: -2px 0 #ff2bd6, 2px 0 #00e5ff; transform: translate(-1px, 0) skewX(4deg); clip-path: inset(50% 0 5% 0); }
-  80%  { text-shadow: 1px 0 #ff2bd6, -1px 0 #00e5ff; transform: translate(1px, 0); clip-path: none; }
+  0%   { text-shadow: 2px 0 #2f8bff, -2px 0 #00e5ff; transform: translate(0); }
+  20%  { text-shadow: -3px 1px #2f8bff, 3px -1px #00e5ff; transform: translate(-2px, 1px) skewX(-6deg); }
+  40%  { text-shadow: 3px -1px #2f8bff, -3px 1px #00e5ff; transform: translate(2px, -1px); clip-path: inset(20% 0 30% 0); }
+  60%  { text-shadow: -2px 0 #2f8bff, 2px 0 #00e5ff; transform: translate(-1px, 0) skewX(4deg); clip-path: inset(50% 0 5% 0); }
+  80%  { text-shadow: 1px 0 #2f8bff, -1px 0 #00e5ff; transform: translate(1px, 0); clip-path: none; }
   100% { text-shadow: 0 0 10px rgba(0, 229, 255, .7), 0 0 30px rgba(0, 229, 255, .35); transform: none; }
 }
 :root[data-look="cyber"] .section-title, :root[data-look="cyber"] .dt-head, :root[data-look="cyber"] .sub-title {
@@ -107,7 +107,7 @@
 :root[data-look="cyber"] .card.long { box-shadow: inset 3px 0 0 var(--c), 0 0 14px -4px var(--c), var(--neon); }
 :root[data-look="cyber"] .evcard { box-shadow: inset 3px 0 0 var(--ev), var(--neon); }
 :root[data-look="cyber"] .icon-btn { background: var(--surface); box-shadow: var(--neon); color: var(--primary); fill: var(--primary); border-radius: 8px; }
-:root[data-look="cyber"] .hint { background: var(--brackets), rgba(255, 43, 214, .08); box-shadow: 0 0 0 1px rgba(255, 43, 214, .35); border-radius: 6px; }
+:root[data-look="cyber"] .hint { background: var(--brackets), rgba(47, 139, 255, .08); box-shadow: 0 0 0 1px rgba(47, 139, 255, .35); border-radius: 6px; }
 :root[data-look="cyber"] .stat { background: rgba(0, 229, 255, .05); box-shadow: inset 0 0 0 1px var(--line); border-radius: 4px; }
 :root[data-look="cyber"] .stat .n { text-shadow: 0 0 10px currentColor; }
 :root[data-look="cyber"] .ring svg { filter: drop-shadow(0 0 6px rgba(0, 229, 255, .7)); }
@@ -163,17 +163,17 @@
 /* ---------- タブバー・追加ボタン ---------- */
 :root[data-look="cyber"] .tabs {
   background: rgba(8, 10, 22, .78); border-radius: 8px;
-  box-shadow: 0 0 0 1px rgba(0, 229, 255, .3), 0 0 30px rgba(0, 229, 255, .15), 0 -1px 0 rgba(255, 43, 214, .5) inset;
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, .3), 0 0 30px rgba(0, 229, 255, .15), 0 -1px 0 rgba(47, 139, 255, .5) inset;
 }
 :root[data-look="cyber"] .tabs button { font-family: var(--mono); font-weight: 400; letter-spacing: .02em; color: var(--muted); border-radius: 4px; }
 :root[data-look="cyber"] .tabs button.active { background: rgba(0, 229, 255, .10); color: var(--primary); text-shadow: 0 0 8px rgba(0, 229, 255, .8); box-shadow: inset 0 -2px 0 var(--primary); }
 :root[data-look="cyber"] .tabs button.active svg { filter: drop-shadow(0 0 6px rgba(0, 229, 255, .9)); }
 :root[data-look="cyber"] .fab {
   border-radius: 10px; background: var(--grad); color: #05060d;
-  box-shadow: 0 0 22px rgba(0, 229, 255, .55), 0 0 44px rgba(255, 43, 214, .3);
+  box-shadow: 0 0 22px rgba(0, 229, 255, .55), 0 0 44px rgba(47, 139, 255, .3);
   animation: pulse 2.6s ease-in-out infinite;
 }
-@keyframes pulse { 50% { box-shadow: 0 0 30px rgba(0, 229, 255, .8), 0 0 60px rgba(255, 43, 214, .45); } }
+@keyframes pulse { 50% { box-shadow: 0 0 30px rgba(0, 229, 255, .8), 0 0 60px rgba(47, 139, 255, .45); } }
 :root[data-look="cyber"] .toast { background: rgba(8, 10, 22, .92); color: var(--primary); font-family: var(--mono); border-radius: 4px; box-shadow: 0 0 0 1px var(--primary), 0 0 20px rgba(0, 229, 255, .4); }
 
 /* ---------- シート ---------- */
@@ -188,21 +188,21 @@
 /* ---------- カレンダー ---------- */
 :root[data-look="cyber"] .cal-cell { border-top: 1px solid var(--line); }
 :root[data-look="cyber"] .cal-cell.today .num { background: transparent; color: var(--primary); box-shadow: 0 0 0 1.5px var(--primary), 0 0 12px rgba(0, 229, 255, .7); border-radius: 4px; }
-:root[data-look="cyber"] .cal-cell.sel { background: rgba(255, 43, 214, .10); box-shadow: inset 0 0 0 1px rgba(255, 43, 214, .45); border-radius: 4px; }
+:root[data-look="cyber"] .cal-cell.sel { background: rgba(47, 139, 255, .10); box-shadow: inset 0 0 0 1px rgba(47, 139, 255, .45); border-radius: 4px; }
 :root[data-look="cyber"] .cl { border-radius: 2px; background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
 :root[data-look="cyber"] .cl.long { color: #05060d; background: var(--c); box-shadow: 0 0 8px var(--c); }
 :root[data-look="cyber"] .cal-grid .sun { color: var(--danger); }
 :root[data-look="cyber"] .cal-grid .sat { color: var(--primary); }
 
 /* ---------- スケジュール ---------- */
-:root[data-look="cyber"] .sug-box { background: var(--brackets), rgba(255, 43, 214, .08); box-shadow: 0 0 0 1px rgba(255, 43, 214, .4), 0 0 24px rgba(255, 43, 214, .12); border-radius: 6px; color: var(--text); }
+:root[data-look="cyber"] .sug-box { background: var(--brackets), rgba(47, 139, 255, .08); box-shadow: 0 0 0 1px rgba(47, 139, 255, .4), 0 0 24px rgba(47, 139, 255, .12); border-radius: 6px; color: var(--text); }
 :root[data-look="cyber"] .tl-hour { border-top: 1px solid var(--line); }
 :root[data-look="cyber"] .tl-hour span { background: transparent; color: var(--muted); }
 :root[data-look="cyber"] .tl-block { border-radius: 3px; background: rgba(13, 17, 34, .9); box-shadow: 0 0 12px -4px currentColor; }
 :root[data-look="cyber"] .tl-block.event { background: var(--ev-soft); color: var(--text); box-shadow: 0 0 14px -6px var(--ev); }
 :root[data-look="cyber"] .tl-block.routine { background: var(--rt-soft); box-shadow: 0 0 14px -6px var(--rt); }
 :root[data-look="cyber"] .tl-block.plan { background: var(--primary-soft); box-shadow: 0 0 14px -6px var(--primary); }
-:root[data-look="cyber"] .tl-block.sug { border: 1px dashed var(--primary-2); border-left: 3px solid var(--primary-2); background: rgba(255, 43, 214, .07); }
+:root[data-look="cyber"] .tl-block.sug { border: 1px dashed var(--primary-2); border-left: 3px solid var(--primary-2); background: rgba(47, 139, 255, .07); }
 :root[data-look="cyber"] .tl-now { border-top: 2px solid var(--primary-2); box-shadow: 0 0 10px var(--primary-2); }
 :root[data-look="cyber"] .tl-now::before { background: var(--primary-2); box-shadow: 0 0 10px var(--primary-2); }
 :root[data-look="cyber"] .tl-due span { background: var(--danger); color: #05060d; border-radius: 2px; box-shadow: 0 0 10px rgba(255, 61, 113, .7); }
