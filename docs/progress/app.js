@@ -45,7 +45,7 @@
     const cutoff = ymd(addDays(new Date(), -60));
     const plans = {};
     Object.entries(d.plans || {}).forEach(([k, v]) => { if (k >= cutoff && v.length) plans[k] = v; });
-    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "memo", ...(d.settings || {}) };
+    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "kotan", ...(d.settings || {}) };
     return { tasks, routines, events, plans, settings };
   }
   function save() {
@@ -1417,7 +1417,7 @@
     const t = state.settings.theme;
     if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
-    const look = ["modern", "cyber", "kotan"].includes(state.settings.look) ? state.settings.look : "memo";
+    const look = ["memo", "modern", "cyber", "kotan"].includes(state.settings.look) ? state.settings.look : "kotan";
     const modern = look === "modern";
     document.documentElement.dataset.look = look;
     const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
