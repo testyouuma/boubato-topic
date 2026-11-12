@@ -1,5 +1,5 @@
 // オフラインでも開けるようにアプリ本体をキャッシュする
-const CACHE = "shinchoku-v5";
+const CACHE = "shinchoku-v6";
 const ASSETS = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -13,7 +13,8 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then((res) => {
+    // GitHub Pages は10分ほどキャッシュさせるので、毎回サーバーに新しい版があるか確認する
+    fetch(e.request, { cache: "no-cache" }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(e.request, copy));
       return res;
