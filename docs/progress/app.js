@@ -1287,11 +1287,23 @@
     if (h < 17) return ["こんちはー", "やっほー"];
     return ["こんばんはー", "きょうもおつかれー"];
   }
-  let kotanCache = { key: "", line: "" };
+  let kotanCache = { key: "", line: "", mood: "normal" };
+  const KOTAN_MOOD_LINES = {
+    sad: ["なんかさみしいー", "かまってー", "しょんぼりー", "きょうはちょっとおちこみぎみー"],
+    sleep: ["ねむいー", "ちょっとねていい", "ぐー", "すやー"],
+  };
+  function pickMood() {
+    const opts = [["normal", 70]];
+    if (kotanImg.sad) opts.push(["sad", 15]);
+    if (kotanImg.sleep) opts.push(["sleep", 15]);
+    let r = Math.random() * opts.reduce((a, [, w]) => a + w, 0);
+    for (const [m, w] of opts) { if ((r -= w) < 0) return m; }
+    return "normal";
+  }
   function kotanTodayLine(info, force) {
     const key = JSON.stringify([info.overdue.map((t) => t.id), info.dueToday.map((t) => t.id), info.pending.map((r) => r.id),
       info.next && info.next.id, info.current && info.current.id, info.open, info.allDone, !!kotanImg.normal]);
-    if (!force && kotanCache.key === key && kotanCache.line) return kotanCache.line;
+    if (!force && kotanCache.key === key && kotanCache.line) return kotanCache;
     const c = [];
     if (info.current) c.push(`いまは${info.current.title}のじかんだよー`, `${info.current.title}ちゅうでしょー がんばれー`);
     if (info.overdue.length) {
@@ -1316,11 +1328,15 @@
     if (Math.random() < 0.3) c.push(...kotanHello());
     let line = pick(c);
     if (force && c.length > 1) { let n = 0; while (line === kotanCache.line && n++ < 5) line = pick(c); }
-    kotanCache = { key, line };
-    return line;
+    const mood = pickMood();
+    // 表情に合わせて、ときどきセリフもその気分に
+    if (KOTAN_MOOD_LINES[mood] && Math.random() < 0.5) line = pick(KOTAN_MOOD_LINES[mood]);
+    kotanCache = { key, line, mood };
+    return kotanCache;
   }
-  function kotanHero(line) {
-    const img = kotanImg.normal ? `<img src="${kotanImg.normal}" alt="コタン">` : `<span class="kotan-ph" aria-hidden="true">🐯</span>`;
+  function kotanHero({ line, mood }) {
+    const src = kotanImg[mood] || kotanImg.normal;
+    const img = src ? `<img src="${src}" alt="コタン">` : `<span class="kotan-ph" aria-hidden="true">🐯</span>`;
     return `<section class="kotan-hero">
       <div class="kotan-bubble" data-kotan-talk>${esc(line)}</div>
       <button class="kotan-pic" data-kotan-talk aria-label="コタン">${img}</button>
@@ -1339,7 +1355,7 @@
   }
 
   // コタンの画像は、このiPhoneの中（IndexedDB）にだけ保存する
-  const kotanImg = { normal: "", happy: "" };
+  const kotanImg = { normal: "", happy: "", sad: "", sleep: "" };
   const imgDB = {
     open() {
       return new Promise((res, rej) => {
@@ -1364,12 +1380,13 @@
   };
   // アプリに入っているコタンの画像（docs/progress/kotan/ に normal.gif・happy.gif などを置く）
   const KOTAN_EXTS = ["gif", "png", "webp", "apng"];
-  const bundled = { normal: "", happy: "" };
+  const MOODS = ["normal", "happy", "sad", "sleep"];
+  const bundled = { normal: "", happy: "", sad: "", sleep: "" };
   let bundledChecked = false;
   async function findBundled() {
     if (bundledChecked) return;
     bundledChecked = true;
-    for (const slot of ["normal", "happy"]) {
+    for (const slot of MOODS) {
       for (const ext of KOTAN_EXTS) {
         const url = `kotan/${slot}.${ext}`;
         try {
@@ -1391,6 +1408,8 @@
       } catch (e) { ownURL[slot] = ""; }
       kotanImg[slot] = ownURL[slot] || bundled[slot];
     }
+    kotanImg.sad = bundled.sad;
+    kotanImg.sleep = bundled.sleep;
   }
 
   /* ---------- テーマ（自動・白・黒） ---------- */
