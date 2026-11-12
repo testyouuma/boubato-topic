@@ -1,5 +1,5 @@
 /* しんちょくノート：手描きのパラパラ漫画メモ帳風テーマ
- * 罫線の紙・太いペン線・ずれた角丸・ベタ影。動きはコマ送り（steps）でカクカクさせる */
+ * 罫線の紙・太いペン線・ずれた角丸・ベタ影 */
 
 :root {
   --paper: #fffbea;
@@ -168,7 +168,7 @@ body {
 .tabs button.active { color: var(--ink); }
 .tabs button.active svg {
   background: var(--hl); border-radius: 45% 55% 50% 50% / 55% 45% 55% 45%; padding: 2px; box-sizing: content-box; margin: -2px;
-  animation: wiggle .5s steps(4) 1;
+  animation: wiggle .5s cubic-bezier(.22,1,.36,1) 1;
 }
 
 .fab {
@@ -186,7 +186,7 @@ body {
 }
 .sheet h2 { font-family: var(--dot-font); font-weight: 400; font-size: 22px; }
 .sheet .grab { background: var(--ink); opacity: .35; }
-.sheet[open] { animation: sheet-up .32s steps(5) both; }
+.sheet[open] { animation: sheet-up .32s cubic-bezier(.22,1,.36,1) both; }
 .field input[type=text], .field input[type=date], .field input[type=time], .field textarea, .field select, .step-add input {
   background: var(--surface); border-width: 2px; border-radius: 12px 9px 13px 8px;
 }
@@ -202,7 +202,7 @@ input[type=range] { accent-color: var(--pen-red); }
 
 /* ---------- トースト：ふせん ---------- */
 .toast { background: #fff3a8; color: #2a2622; border: 2px solid #2a2622; box-shadow: 3px 3px 0 #2a2622; border-radius: 3px; font-weight: 700; }
-.toast.show { animation: toast-in .3s steps(4); }
+.toast.show { animation: toast-in .3s cubic-bezier(.22,1,.36,1); }
 
 /* ---------- カレンダー ---------- */
 .cal-head b { font-family: var(--dot-font); font-weight: 400; font-size: 20px; }
@@ -230,7 +230,6 @@ input[type=range] { accent-color: var(--pen-red); }
 .tl-block.sug {
   border: 2.5px dashed var(--pen-blue); border-left: 6px solid var(--pen-blue); box-shadow: none;
   background: color-mix(in srgb, var(--hl) 22%, var(--surface));
-  animation: ants 1.2s steps(2) infinite;
 }
 .tl-now { border-top: 2.5px solid var(--pen-red); }
 .tl-due {
@@ -256,7 +255,7 @@ input[type=range] { accent-color: var(--pen-red); }
 .empty { border: 2px dashed color-mix(in srgb, var(--ink) 30%, transparent); background: color-mix(in srgb, var(--surface) 60%, transparent); }
 
 /* =========================================================
-   アニメーション（コマ送りでカクカク動かす）
+   アニメーション（なめらかに動かす）
    ========================================================= */
 
 /* 線がふるえる（手描きアニメの「ボイル」） */
@@ -270,58 +269,55 @@ input[type=range] { accent-color: var(--pen-red); }
   33%  { border-radius: 53% 47% 52% 48% / 47% 53% 46% 54%; }
   66%  { border-radius: 46% 54% 49% 51% / 51% 49% 55% 45%; }
 }
-.fab { animation: boil-round .9s steps(1) infinite; }
-.summary, .sug-box, .day-tasks { animation: boil 1.2s steps(1) infinite; }
-.top h1 { animation: title-boil 1.2s steps(1) infinite; }
 @keyframes title-boil { 0% { transform: rotate(-1.5deg); } 33% { transform: rotate(-1deg) translateY(-1px); } 66% { transform: rotate(-2deg); } }
 
-/* ページを開いたとき：コマ送りでポンと出てくる */
+/* ページを開いたとき：ふわっと出てくる */
 @keyframes pop-in {
-  0% { opacity: 0; transform: translateY(10px) scale(.96) rotate(-1deg); }
-  50% { opacity: 1; transform: translateY(-3px) scale(1.01) rotate(.5deg); }
+  0% { opacity: 0; transform: translateY(12px) scale(.98); }
+  60% { opacity: 1; }
   100% { opacity: 1; transform: none; }
 }
 .enter .summary, .enter .cal, .enter .sched-head, .enter .sug-box, .enter .day-tasks, .enter .timeline,
 .enter .list > *, .enter .section-title, .enter .chips, .enter .empty {
-  animation: pop-in .42s steps(4) both;
+  animation: pop-in .42s cubic-bezier(.22,1,.36,1) both;
 }
 .enter .list > *:nth-child(2) { animation-delay: .05s; }
 .enter .list > *:nth-child(3) { animation-delay: .10s; }
 .enter .list > *:nth-child(4) { animation-delay: .15s; }
 .enter .list > *:nth-child(5) { animation-delay: .20s; }
 .enter .list > *:nth-child(n+6) { animation-delay: .25s; }
-.enter .ring .fg { animation: ring-draw .7s steps(7) both; }
+.enter .ring .fg { animation: ring-draw .7s cubic-bezier(.22,1,.36,1) both; }
 @keyframes ring-draw { from { stroke-dashoffset: 226; } }
-.enter .tl-block { animation: pop-in .4s steps(4) both; }
+.enter .tl-block { animation: pop-in .4s cubic-bezier(.22,1,.36,1) both; }
 .enter .tl-block:nth-of-type(2n) { animation-delay: .06s; }
 .enter .tl-block:nth-of-type(3n) { animation-delay: .12s; }
-.enter .tl-block.sug { animation: pop-in .4s steps(4) both, ants 1.2s steps(2) infinite .4s; }
+.enter .tl-block.sug { animation: pop-in .45s cubic-bezier(.22,1,.36,1) both; }
 
 /* オニオンスキン（前のページがうっすら青く残って消える） */
 main { position: relative; }
 .onion {
   position: absolute; top: 4px; left: 16px; right: 16px; pointer-events: none; z-index: 1;
   filter: grayscale(1) sepia(1) hue-rotate(170deg) saturate(4); opacity: .3;
-  animation: onion-out .5s steps(4) forwards;
+  animation: onion-out .5s cubic-bezier(.22,1,.36,1) forwards;
 }
 .onion * { animation: none !important; }
 @keyframes onion-out { 0% { opacity: .35; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-14px); } }
 
 /* 日付・月を移動したとき：パラパラめくる */
-.slide-l > * { animation: flip-l .36s steps(4) both; }
-.slide-r > * { animation: flip-r .36s steps(4) both; }
+.slide-l > * { animation: flip-l .36s cubic-bezier(.22,1,.36,1) both; }
+.slide-r > * { animation: flip-r .36s cubic-bezier(.22,1,.36,1) both; }
 @keyframes flip-l { 0% { opacity: .2; transform: translateX(36px) skewX(-4deg); } 100% { opacity: 1; transform: none; } }
 @keyframes flip-r { 0% { opacity: .2; transform: translateX(-36px) skewX(4deg); } 100% { opacity: 1; transform: none; } }
 
 /* チェックを赤ペンで描く */
-.check.just { animation: check-pop .4s steps(4); }
-.check.just svg path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: draw .32s steps(5) .05s forwards; }
+.check.just { animation: check-pop .4s cubic-bezier(.22,1,.36,1); }
+.check.just svg path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: draw .32s cubic-bezier(.22,1,.36,1) .05s forwards; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes check-pop { 0% { transform: scale(.6) rotate(-12deg); } 50% { transform: scale(1.3) rotate(6deg); } 100% { transform: none; } }
 
 /* はじけるインク */
 .burst { position: fixed; z-index: 40; width: 0; height: 0; pointer-events: none; }
-.burst i { position: absolute; left: 0; top: 0; transform-origin: 0 50%; animation: burst .65s steps(6) forwards; }
+.burst i { position: absolute; left: 0; top: 0; transform-origin: 0 50%; animation: burst .65s cubic-bezier(.22,1,.36,1) forwards; }
 .burst .b0 { width: 14px; height: 4px; margin-top: -2px; background: var(--c); border-radius: 3px; }
 .burst .b1 { width: 13px; height: 13px; margin: -6px 0 0 -6px; background: var(--c);
   clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 80% 100%, 50% 76%, 20% 100%, 30% 60%, 0 38%, 38% 36%); transform-origin: 6px 6px; }
@@ -339,7 +335,7 @@ main { position: relative; }
   border: 4px solid var(--pen-red); border-radius: 14px 10px 16px 9px; padding: 2px 18px;
   background: color-mix(in srgb, var(--paper) 88%, transparent);
   transform: translate(-50%, -50%) rotate(var(--r, -8deg));
-  animation: stamp 1.25s steps(1, end) forwards, stamp-fade 1.25s linear forwards;
+  animation: stamp 1.25s cubic-bezier(.22,1,.36,1) forwards, stamp-fade 1.25s ease forwards;
 }
 @keyframes stamp {
   0%  { transform: translate(-50%, -50%) rotate(var(--r)) scale(2.4); }

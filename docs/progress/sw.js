@@ -1,6 +1,6 @@
 // オフラインでも開けるようにアプリ本体をキャッシュする
-const CACHE = "shinchoku-v8";
-const ASSETS = ["./", "index.html", "style.css", "doodle.css", "app.js", "manifest.webmanifest", "icon-180.png", "icon-512.png"];
+const CACHE = "shinchoku-v9";
+const ASSETS = ["./", "index.html", "style.css", "doodle.css", "modern.css", "app.js", "manifest.webmanifest", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

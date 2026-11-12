@@ -45,7 +45,7 @@
     const cutoff = ymd(addDays(new Date(), -60));
     const plans = {};
     Object.entries(d.plans || {}).forEach(([k, v]) => { if (k >= cutoff && v.length) plans[k] = v; });
-    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", ...(d.settings || {}) };
+    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "memo", ...(d.settings || {}) };
     return { tasks, routines, events, plans, settings };
   }
   function save() {
@@ -710,6 +710,11 @@
     const n = pendingTasks.length + pendingRoutines.length + pendingEvents.length;
     openSheet(`
       <h2>メニュー</h2>
+      <div class="field"><span class="label">見た目</span>
+        <div class="seg">
+          <button type="button" data-look-set="memo">📒 メモ帳</button>
+          <button type="button" data-look-set="modern">✨ モダン</button>
+        </div></div>
       <div class="field"><span class="label">テーマ</span>
         <div class="seg seg3">
           <button type="button" data-theme-set="auto">📱 自動</button>
@@ -735,6 +740,11 @@
       $("#m-close", f).onclick = closeSheet;
       const paintTheme = () => f.querySelectorAll("[data-theme-set]").forEach((b) => b.classList.toggle("on", b.dataset.themeSet === state.settings.theme));
       paintTheme();
+      const paintLook = () => f.querySelectorAll("[data-look-set]").forEach((b) => b.classList.toggle("on", b.dataset.lookSet === state.settings.look));
+      paintLook();
+      f.querySelectorAll("[data-look-set]").forEach((b) => b.onclick = () => {
+        state.settings.look = b.dataset.lookSet; save(); applyTheme(); paintLook(); render(); fx.enter();
+      });
       f.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
         state.settings.theme = b.dataset.themeSet; save(); applyTheme(); paintTheme();
       });
@@ -1204,8 +1214,10 @@
     const t = state.settings.theme;
     if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
+    const modern = state.settings.look === "modern";
+    document.documentElement.dataset.look = modern ? "modern" : "memo";
     const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", dark ? "#23262b" : "#fffbea"));
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
   }
   applyTheme();
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
