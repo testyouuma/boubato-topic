@@ -391,3 +391,5 @@ main { position: relative; }
 :root[data-theme="dark"] .hint { background: #5a5126; color: #fff6cf; }
 :root[data-theme="dark"] .sug-box { background: #5a5126; color: #fff6cf; } :root[data-theme="dark"] .sug-box .note { color: #f1e6b8; }
 .seg.seg3 { grid-template-columns: 1fr 1fr 1fr; }
+.seg.seg4 { grid-template-columns: repeat(4, 1fr); }
+.seg.seg4 button { font-size: 12.5px; padding: 8px 2px; white-space: nowrap; }
