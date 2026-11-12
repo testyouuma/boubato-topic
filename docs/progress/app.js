@@ -164,6 +164,15 @@
   /* ---------- カレンダー(.ics) 生成 ---------- */
   const icsEsc = (s) => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
   const icsLocal = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  // 時刻には必ずタイムゾーン（日本なら Asia/Tokyo）を付ける。付けないと iPhone が別の時間帯として読むことがある
+  const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo"; } catch (e) { return "Asia/Tokyo"; } })();
+  const dt = (name, d) => `${name};TZID=${TZ}:${icsLocal(d)}`;
+  function vtimezone() {
+    const off = -new Date().getTimezoneOffset();
+    const o = `${off >= 0 ? "+" : "-"}${pad(Math.floor(Math.abs(off) / 60))}${pad(Math.abs(off) % 60)}`;
+    return ["BEGIN:VTIMEZONE", `TZID:${TZ}`, "BEGIN:STANDARD", "DTSTART:19700101T000000",
+      `TZOFFSETFROM:${o}`, `TZOFFSETTO:${o}`, `TZNAME:${TZ === "Asia/Tokyo" ? "JST" : "UTC" + o}`, "END:STANDARD", "END:VTIMEZONE"];
+  }
   const icsUtc = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   function fold(line) {
     // 75オクテットごとに折り返す（UTF-8 の文字を途中で切らない）
@@ -186,7 +195,7 @@
     const due = parseLocal(t.due);
     const end = new Date(due.getTime() + 30 * 60000);
     const lines = ["BEGIN:VEVENT", `UID:task-${t.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`,
-      `DTSTART:${icsLocal(due)}`, `DTEND:${icsLocal(end)}`,
+      dt("DTSTART", due), dt("DTEND", end),
       `SUMMARY:${icsEsc((isLong(t) ? "【長期・期限】" : "【期限】") + t.title)}`];
     const desc = [t.memo, ...(t.steps || []).map((s) => `・${s.title}`)].filter(Boolean).join("\n");
     if (desc) lines.push(`DESCRIPTION:${icsEsc(desc)}`);
@@ -205,12 +214,12 @@
     const rrule = r.days.length === 7 ? "RRULE:FREQ=DAILY"
       : `RRULE:FREQ=WEEKLY;BYDAY=${r.days.map((d) => ICS_DAY[d]).join(",")}`;
     return ["BEGIN:VEVENT", `UID:routine-${r.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`,
-      `DTSTART:${icsLocal(start)}`, `DTEND:${icsLocal(end)}`, rrule,
+      dt("DTSTART", start), dt("DTEND", end), rrule,
       `SUMMARY:${icsEsc("🔁 " + r.title)}`, ...alarm(`ルーティンの時間です：${r.title}（〜${r.end}）`, 0), "END:VEVENT"];
   }
   function buildIcs(eventLines) {
     const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ShinchokuNote//JA", "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH", ...eventLines, "END:VCALENDAR"];
+      "METHOD:PUBLISH", ...vtimezone(), ...eventLines, "END:VCALENDAR"];
     return lines.map(fold).join("\r\n") + "\r\n";
   }
   function openIcs(text, name) {
@@ -702,6 +711,7 @@
           <label class="mini">寝る<input type="time" id="m-sleep" value="${state.settings.sleep}"></label></div></div>
       <div class="menu-list">
         <button type="button" class="btn cal" id="m-cal" ${n ? "" : "disabled"}>🔔 未登録の通知をまとめてカレンダーに追加（${n}件）</button>
+        <button type="button" class="btn" id="m-recal">🔁 カレンダーの通知をすべて登録し直す</button>
         <button type="button" class="btn" id="m-export">📤 バックアップを書き出す</button>
         <button type="button" class="btn" id="m-import">📥 バックアップから復元</button>
         <button type="button" class="btn" id="m-clear">🧹 完了したタスクを整理</button>
@@ -725,6 +735,20 @@
         openIcs(buildIcs(ev), "shinchoku-all.ics");
         pendingTasks.forEach((t) => (t.calAdded = true));
         pendingRoutines.forEach((r) => (r.calAdded = true));
+        save(); closeSheet(); render();
+      };
+      $("#m-recal", f).onclick = () => {
+        const ts = todayStr();
+        const tasks = state.tasks.filter((t) => !t.done && t.due && t.remind >= 0 && parseLocal(t.due) > new Date());
+        const events = state.events.filter((ev) => ev.remind >= 0 && (ev.repeat === "weekly" || ev.date >= ts));
+        const plans = Object.entries(state.plans).filter(([d]) => d >= ts)
+          .flatMap(([d, ps]) => ps.filter((p) => !p.done && p.calAdded).map((p) => [d, p]));
+        const n2 = tasks.length + state.routines.length + events.length + plans.length;
+        if (!n2) { toast("登録する通知がありません"); return; }
+        if (!confirm(`${n2}件の通知をカレンダーに登録し直します。\n先にiPhoneのカレンダーから、前に追加した予定を消しておくと重複しません。`)) return;
+        openIcs(buildIcs([...tasks.flatMap(taskEvent), ...state.routines.flatMap(routineEvent),
+          ...events.flatMap(eventEvent), ...plans.flatMap(([d, p]) => planEvent(d, p))]), "shinchoku-all.ics");
+        [...tasks, ...state.routines, ...events].forEach((x) => (x.calAdded = true));
         save(); closeSheet(); render();
       };
       $("#m-export", f).onclick = async () => {
@@ -785,7 +809,7 @@
     else {
       const s = new Date(`${ev.date}T${ev.start}`);
       const m = endMin(ev.start, ev.end) - toMin(ev.start);
-      lines.push(`DTSTART:${icsLocal(s)}`, `DTEND:${icsLocal(new Date(s.getTime() + m * 60000))}`);
+      lines.push(dt("DTSTART", s), dt("DTEND", new Date(s.getTime() + m * 60000)));
     }
     if (ev.repeat === "weekly") lines.push("RRULE:FREQ=WEEKLY");
     lines.push(`SUMMARY:${icsEsc(ev.title)}`);
@@ -803,7 +827,7 @@
     const s = new Date(`${ds}T${p.start}`);
     const m = endMin(p.start, p.end) - toMin(p.start);
     return ["BEGIN:VEVENT", `UID:plan-${p.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`,
-      `DTSTART:${icsLocal(s)}`, `DTEND:${icsLocal(new Date(s.getTime() + m * 60000))}`,
+      dt("DTSTART", s), dt("DTEND", new Date(s.getTime() + m * 60000)),
       `SUMMARY:${icsEsc("✅ " + p.title)}`, ...alarm(`Todoの時間です：${p.title}`, 0), "END:VEVENT"];
   }
 
