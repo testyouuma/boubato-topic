@@ -327,7 +327,12 @@
         <small class="go">スケジュールを見る ›</small></button>`
       : `<button class="now-banner" data-goto="schedule"><span>このあとの予定はありません</span><small class="go">💡 Todoを提案してもらう ›</small></button>`;
 
-    main.innerHTML = `
+    const hero = isKotan() ? kotanHero(kotanTodayLine({
+      overdue, dueToday, pending: todays.filter((r) => !isDoneOn(r, ts)), next, current,
+      open: open.length, total, allDone: total > 0 && got === total,
+    }, kotanForce)) : "";
+    kotanForce = false;
+    main.innerHTML = `${hero}
       <section class="summary">
         <div class="date">${now.getMonth() + 1}月${now.getDate()}日（${WD[now.getDay()]}）</div>
         <div class="ring-row">
@@ -350,11 +355,11 @@
 
       <div class="section-title">今日のルーティン <small>${rDone}/${todays.length}</small></div>
       <div class="list">${todays.length ? todays.map((r) => routineCard(r, ts, true)).join("")
-        : `<div class="empty">今日のルーティンはありません<br>「ルーティン」タブから登録できます</div>`}</div>
+        : `<div class="empty">${say("今日のルーティンはありません<br>「ルーティン」タブから登録できます", "きょうのるーてぃんはないよー")}</div>`}</div>
 
       <div class="section-title">期限が近いタスク <small>3日以内・期限切れ</small></div>
       <div class="list">${soon.length ? soon.map(taskCard).join("")
-        : `<div class="empty">期限が近いタスクはありません 🎉</div>`}</div>
+        : `<div class="empty">${say("期限が近いタスクはありません 🎉", "きげんちかいのないよー よゆーじゃん")}</div>`}</div>
 
       ${longs.length ? `<div class="section-title">進行中の長期タスク <small>${longs.length}件</small></div>
       <div class="list">${longs.map(taskCard).join("")}</div>` : ""}`;
@@ -383,7 +388,7 @@
       <div class="list">${list.length ? list.map(taskCard).join("")
         : `<div class="empty">${taskFilter === "done" ? "完了したタスクはまだありません"
           : taskFilter === "long" ? "長期タスクはありません<br>＋ →「長期」で、開始日〜期限とステップを決めて登録できます"
-          : "タスクはありません<br>右下の ＋ から追加しましょう"}</div>`}</div>`;
+          : say("タスクはありません<br>右下の ＋ から追加しましょう", "たすくはないよー")}</div>`}</div>`;
   }
 
   function renderRoutines() {
@@ -393,7 +398,7 @@
     main.innerHTML = `
       <p class="note" style="margin:4px 4px 12px">決まった曜日・時間帯にくり返す習慣です。今日が対象日のものはチェックできます。</p>
       <div class="list">${list.length ? list.map((r) => routineCard(r, ts, isScheduled(r, now))).join("")
-        : `<div class="empty">ルーティンはまだありません<br>右下の ＋ から追加しましょう<br><small>例：朝の筋トレ 7:00〜7:30・日記・薬を飲む</small></div>`}</div>`;
+        : `<div class="empty">${say("ルーティンはまだありません<br>右下の ＋ から追加しましょう<br><small>例：朝の筋トレ 7:00〜7:30・日記・薬を飲む</small>", "るーてぃんまだないよー なんかつくろ")}</div>`}</div>`;
   }
 
   /* ---------- カレンダー画面 ---------- */
@@ -459,7 +464,7 @@
         <button class="chip" data-add-event="${ds}">＋ 予定</button><button class="chip" data-add-on="${ds}">＋ タスク</button>
         <button class="chip on" data-open-schedule="${ds}">🗓 スケジュール表${planN ? `（Todo ${planN}）` : ""}</button>
       </div>
-      ${empty ? `<div class="empty">予定はありません</div>` : ""}
+      ${empty ? `<div class="empty">${say("予定はありません", "よていないよー")}</div>` : ""}
       ${evs.length ? `<div class="sub-title">予定</div><div class="list">${evs.map((ev) => eventCard(ev)).join("")}</div>` : ""}
       ${routines.length ? `<div class="sub-title">ルーティン</div><div class="list">${routines.map((r) => routineCard(r, ds, ds <= ts)).join("")}</div>` : ""}
       ${dues.length ? `<div class="sub-title">この日が期限</div><div class="list">${dues.map(taskCard).join("")}</div>` : ""}
@@ -720,6 +725,15 @@
           <button type="button" data-look-set="kotan">🍊 コタン</button>
         </div>
         <p class="note" id="m-look-note"></p></div>
+      <div class="field" id="m-kotan"><span class="label">🐯 コタンの画像（透過PNG・GIFもOK）</span>
+        <div class="kotan-slots">
+          <div class="kslot"><div class="kthumb" id="kt-normal"></div><b>ふだん</b>
+            <div class="kbtns"><button type="button" class="chip" data-kimg-pick="normal">えらぶ</button><button type="button" class="chip" data-kimg-del="normal">けす</button></div></div>
+          <div class="kslot"><div class="kthumb" id="kt-happy"></div><b>よろこび</b><small>完了したとき</small>
+            <div class="kbtns"><button type="button" class="chip" data-kimg-pick="happy">えらぶ</button><button type="button" class="chip" data-kimg-del="happy">けす</button></div></div>
+        </div>
+        <input type="file" id="kt-file" accept="image/*" hidden>
+        <p class="note">画像はこのiPhoneの中だけに保存されます（バックアップのファイルには入りません）</p></div>
       <div class="field"><span class="label">テーマ</span>
         <div class="seg seg3">
           <button type="button" data-theme-set="auto">📱 自動</button>
@@ -748,8 +762,30 @@
       const paintLook = () => {
         f.querySelectorAll("[data-look-set]").forEach((b) => b.classList.toggle("on", b.dataset.lookSet === state.settings.look));
         $("#m-look-note", f).textContent = state.settings.look === "cyber" ? "サイバーはいつも暗い配色です（テーマの白・黒は使われません）" : "";
+        $("#m-kotan", f).hidden = state.settings.look !== "kotan";
       };
       paintLook();
+      const paintThumbs = () => ["normal", "happy"].forEach((k) => {
+        $(`#kt-${k}`, f).innerHTML = kotanImg[k] ? `<img src="${kotanImg[k]}" alt="">` : `<span>🐯</span>`;
+      });
+      paintThumbs();
+      let kslot = "normal";
+      f.querySelectorAll("[data-kimg-pick]").forEach((b) => b.onclick = () => { kslot = b.dataset.kimgPick; $("#kt-file", f).click(); });
+      f.querySelectorAll("[data-kimg-del]").forEach((b) => b.onclick = async () => {
+        try { await imgDB.del(b.dataset.kimgDel); } catch (e) { /* noop */ }
+        await loadKotanImgs(); paintThumbs(); render();
+      });
+      $("#kt-file", f).onchange = async (e) => {
+        const file = e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        if (file.size > 15 * 1024 * 1024) { toast("画像が大きすぎます（15MBまで）"); return; }
+        try {
+          await imgDB.set(kslot, file);
+          await loadKotanImgs(); paintThumbs(); render();
+          toast(say("画像を入れました", "いれたよー かわいいじゃん"));
+        } catch (err) { toast("画像を保存できませんでした"); }
+      };
       f.querySelectorAll("[data-look-set]").forEach((b) => b.onclick = () => {
         state.settings.look = b.dataset.lookSet; save(); applyTheme(); paintLook(); render(); fx.enter(); fx.glitch();
       });
@@ -1123,7 +1159,7 @@
     }).join("");
     return `<section class="day-tasks">
       <div class="dt-head">📝 ${ds === ts ? "今日" : "この日"}のタスク <small>${list.length}件</small></div>
-      ${list.length ? rows : `<p class="note">期限が近いタスクはありません</p>`}
+      ${list.length ? rows : `<p class="note">${say("期限が近いタスクはありません", "きげんちかいのないよー")}</p>`}
     </section>`;
   }
 
@@ -1196,8 +1232,8 @@
     const plansNeedCal = plans.some((p) => !p.done && !p.calAdded) && ds >= ts;
     const sugBox = sug.length ? `
       <section class="sug-box">
-        <b>💡 ${suggestion.auto ? "空き時間にタスクを入れてみました" : "おすすめのTodo"}（${sug.length}件）</b>
-        <p class="note">期限が近いもの・遅れているものから入れています。点線の枠が提案です。いらないものはタップで外して、「決定」で確定します。</p>
+        <b>💡 ${say(`${suggestion.auto ? "空き時間にタスクを入れてみました" : "おすすめのTodo"}（${sug.length}件）`, `あいてるとこに${sug.length}こいれてみたよー`)}</b>
+        <p class="note">${say("期限が近いもの・遅れているものから入れています。点線の枠が提案です。いらないものはタップで外して、「決定」で確定します。", "きげんちかいのからいれといた いらないのはタップでけしてね よかったらけっていおしてー")}</p>
         <div class="actions"><button class="btn" data-sug-cancel>今日はいいや</button><button class="btn primary" data-sug-accept>この内容で決定</button></div>
       </section>`
       : `<button class="btn primary wide" data-suggest>💡 ${ds === ts ? "今日" : "この日"}のTodoを提案して</button>`;
@@ -1215,6 +1251,105 @@
       ${dayTaskPanel(ds, sug)}
       <section class="timeline" style="height:${(to - from) * PX + 16}px">${hours}${blocks}${dueLines}${nowLine}</section>
       ${!all.length ? `<p class="note" style="text-align:center;margin-top:10px">右下の ＋ から予定を入れるか、「Todoを提案して」を押してみてください</p>` : ""}`;
+  }
+
+  /* ---------- コタン（オリキャラのマスコット・トラの女の子） ---------- */
+  let kotanForce = false;
+  // 見た目が「コタン」のときだけ出てくる。口調は句読点も記号も使わない ゆるくて適当
+  const isKotan = () => document.documentElement.dataset.look === "kotan";
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const say = (normal, kotan) => (isKotan() ? kotan : normal);
+  const KOTAN_PRAISE = ["やるねー", "えらいじゃん", "おつかれー", "いいかんじー", "さすがー", "ないすー", "やるじゃん", "えらいえらい", "かんぺきー", "いえーい"];
+  function kotanHello() {
+    const h = new Date().getHours();
+    if (h < 5) return ["まだおきてんのー", "よふかしさんだー ねなよー"];
+    if (h < 11) return ["おはよー", "おはよー ねむいねー"];
+    if (h < 17) return ["こんちはー", "やっほー"];
+    return ["こんばんはー", "きょうもおつかれー"];
+  }
+  let kotanCache = { key: "", line: "" };
+  function kotanTodayLine(info, force) {
+    const key = JSON.stringify([info.overdue.map((t) => t.id), info.dueToday.map((t) => t.id), info.pending.map((r) => r.id),
+      info.next && info.next.id, info.current && info.current.id, info.open, info.allDone, !!kotanImg.normal]);
+    if (!force && kotanCache.key === key && kotanCache.line) return kotanCache.line;
+    const c = [];
+    if (info.current) c.push(`いまは${info.current.title}のじかんだよー`, `${info.current.title}ちゅうでしょー がんばれー`);
+    if (info.overdue.length) {
+      const x = info.overdue[0];
+      c.push(`${x.title}きげんすぎてるよー やばいかも`, `きげんきれてるの${info.overdue.length}こあるよーん`);
+    }
+    if (info.dueToday.length) {
+      const x = info.dueToday[0];
+      c.push(`今日は${x.title}があるよーん`, `${x.title}今日までだよー がんばろ`, `今日しめきりのやつ${info.dueToday.length}こあるよー`);
+    }
+    if (info.pending.length) {
+      const r = info.pending[0];
+      c.push(`${r.title}まだやってないよー`, `${r.title}わすれてないー`);
+    }
+    if (info.next) c.push(`つぎは${info.next.start}から${info.next.title}だよー`);
+    if (!c.length) {
+      if (!info.open && info.total === 0) c.push("たすくはないよー", "なんもないよー ひまだねー", "きょうはなんもないよー ごろごろしよ");
+      else if (info.allDone) c.push("ぜんぶおわってるじゃん やるねー", "きょうのぶんおわりー えらい");
+      else c.push(`まだ${info.open}こたすくあるよー ぼちぼちいこ`, "のんびりやろー");
+    }
+    if (!kotanImg.normal && Math.random() < 0.25) c.push("メニューからあたしの画像いれてねー");
+    if (Math.random() < 0.3) c.push(...kotanHello());
+    let line = pick(c);
+    if (force && c.length > 1) { let n = 0; while (line === kotanCache.line && n++ < 5) line = pick(c); }
+    kotanCache = { key, line };
+    return line;
+  }
+  function kotanHero(line) {
+    const img = kotanImg.normal ? `<img src="${kotanImg.normal}" alt="コタン">` : `<span class="kotan-ph" aria-hidden="true">🐯</span>`;
+    return `<section class="kotan-hero">
+      <div class="kotan-bubble" data-kotan-talk>${esc(line)}</div>
+      <button class="kotan-pic" data-kotan-talk aria-label="コタン">${img}</button>
+    </section>`;
+  }
+  // 完了したときなどに、下からひょこっと出てくる
+  function kotanPop(text) {
+    document.querySelectorAll(".kotan-pop").forEach((x) => x.remove());
+    const el = document.createElement("div");
+    el.className = "kotan-pop";
+    const src = kotanImg.happy || kotanImg.normal;
+    el.innerHTML = `${src ? `<img src="${src}" alt="">` : `<span class="kotan-ph" aria-hidden="true">🐯</span>`}<div class="kotan-bubble">${esc(text)}</div>`;
+    document.body.appendChild(el);
+    setTimeout(() => el.classList.add("out"), 1900);
+    setTimeout(() => el.remove(), 2400);
+  }
+
+  // コタンの画像は、このiPhoneの中（IndexedDB）にだけ保存する
+  const kotanImg = { normal: "", happy: "" };
+  const imgDB = {
+    open() {
+      return new Promise((res, rej) => {
+        const r = indexedDB.open("shinchoku-images", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("img");
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+    },
+    async run(mode, fn) {
+      const db = await imgDB.open();
+      return new Promise((res, rej) => {
+        const tx = db.transaction("img", mode);
+        const req = fn(tx.objectStore("img"));
+        tx.oncomplete = () => res(req && req.result);
+        tx.onerror = () => rej(tx.error);
+      });
+    },
+    get: (k) => imgDB.run("readonly", (s) => s.get(k)),
+    set: (k, v) => imgDB.run("readwrite", (s) => s.put(v, k)),
+    del: (k) => imgDB.run("readwrite", (s) => s.delete(k)),
+  };
+  async function loadKotanImgs() {
+    for (const slot of ["normal", "happy"]) {
+      try {
+        const blob = await imgDB.get(slot);
+        if (kotanImg[slot]) URL.revokeObjectURL(kotanImg[slot]);
+        kotanImg[slot] = blob ? URL.createObjectURL(blob) : "";
+      } catch (e) { kotanImg[slot] = ""; }
+    }
   }
 
   /* ---------- テーマ（自動・白・黒） ---------- */
@@ -1273,6 +1408,16 @@
     },
     // ハンコがポンと押される
     stamp(text) {
+      if (isKotan()) {
+        let line = pick(KOTAN_PRAISE);
+        const m = /(\d+)回連続/.exec(text || "");
+        if (m) line = `${m[1]}かいれんぞくだよー すごくない`;
+        if (text === "けってい！") line = "きまりー がんばろ";
+        kotanPop(line);
+        const pic = main.querySelector(".kotan-pic");
+        if (pic) { pic.classList.remove("hop"); void pic.offsetWidth; pic.classList.add("hop"); }
+        return;
+      }
       if (reduceMotion) return;
       fx.glitch();
       document.querySelectorAll(".stamp").forEach((x) => x.remove());
@@ -1365,6 +1510,12 @@
       if (d.getMonth() !== calMonth.getMonth()) calMonth = firstOfMonth(d);
       render(); return;
     }
+    if (e.target.closest("[data-kotan-talk]")) {
+      kotanForce = true; render();
+      const pic = main.querySelector(".kotan-pic");
+      if (pic) pic.classList.add("hop");
+      return;
+    }
     const go = e.target.closest("[data-goto]");
     if (go) { if (go.dataset.goto === "schedule") schedDate = todayStr(); goTab(go.dataset.goto); return; }
     const os = e.target.closest("[data-open-schedule]");
@@ -1380,7 +1531,7 @@
       const blocks = suggest(schedDate);
       suggestion = { date: schedDate, blocks };
       if (blocks.length) fx.burst(at[0], at[1]);
-      if (!blocks.length) toast("入れられるTodoが見つかりませんでした");
+      if (!blocks.length) toast(say("入れられるTodoが見つかりませんでした", "いれられるのなかったよー"));
       render(); return;
     }
     if (e.target.closest("[data-sug-accept]")) {
@@ -1396,7 +1547,7 @@
       state.plans[schedDate] = [...(state.plans[schedDate] || []), ...bl];
       save();
       if (suggestion && suggestion.date === schedDate) suggestion.blocks = suggest(schedDate);
-      render(); fx.burst(at[0], at[1]); toast(`${bl[0].start}〜に入れました`); return;
+      render(); fx.burst(at[0], at[1]); toast(say(`${bl[0].start}〜に入れました`, `${bl[0].start}からにいれといたよー`)); return;
     }
     const sg = e.target.closest("[data-sug]");
     if (sg) { suggestion.blocks = suggestion.blocks.filter((b) => b.id !== sg.dataset.sug); toast("提案から外しました"); render(); return; }
@@ -1459,4 +1610,5 @@
 
   render();
   fx.enter();
+  loadKotanImgs().then(() => { if (isKotan() && (kotanImg.normal || kotanImg.happy)) render(); });
 })();
