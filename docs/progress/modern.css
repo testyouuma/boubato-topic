@@ -1,0 +1,198 @@
+/* しんちょくノート：モダンな見た目（メニューの「見た目 → モダン」）
+ * 白基調・大きめの角丸・ふんわりした影・すりガラスのタブバー。
+ * メモ帳テーマ（doodle.css）の上から、html[data-look="modern"] のときだけ上書きする */
+
+:root[data-look="modern"] {
+  --bg: #f3f4f8;
+  --surface: #ffffff;
+  --surface-2: #f0f1f6;
+  --text: #14161c;
+  --ink: #14161c;
+  --muted: #6b7180;
+  --line: #e6e8ef;
+  --primary: #5b5bf6;
+  --primary-2: #9b5cf6;
+  --primary-soft: #ececff;
+  --on-primary: #ffffff;
+  --hl: #5b5bf6;
+  --pen-red: #f0445a;
+  --pen-blue: #5b5bf6;
+  --pen-green: #18b47b;
+  --ok: #18b47b;
+  --ok-soft: #e2f7ef;
+  --warn: #f08a00;
+  --warn-soft: #fff2de;
+  --danger: #f0445a;
+  --danger-soft: #ffe7ea;
+  --ev: #0ea5c6;
+  --ev-soft: #e0f6fb;
+  --rt: #18b47b;
+  --rt-soft: #e2f7ef;
+  --grad: linear-gradient(135deg, var(--primary), var(--primary-2));
+  --soft: 0 1px 2px rgba(20, 22, 40, .04), 0 6px 24px rgba(20, 22, 40, .07);
+  --soft-lg: 0 10px 30px rgba(60, 50, 160, .25);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look="modern"]:not([data-theme="light"]) {
+    --bg: #0d0e12; --surface: #18191f; --surface-2: #22242c; --text: #f2f3f7; --ink: #f2f3f7; --muted: #9a9fb0; --line: #2a2c35;
+    --primary: #7474ff; --primary-2: #a970ff; --primary-soft: #262650; --on-primary: #0d0e12; --hl: #8a8aff;
+    --pen-red: #ff6b7d; --pen-blue: #8a8aff; --pen-green: #3fd69a; --ok: #3fd69a; --ok-soft: #13342a; --warn: #ffb547; --warn-soft: #3a2c14;
+    --danger: #ff6b7d; --danger-soft: #3d1c22; --ev: #4fd1ee; --ev-soft: #12323b; --rt: #3fd69a; --rt-soft: #13342a;
+    --soft: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    --soft-lg: 0 10px 30px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-look="modern"][data-theme="dark"] {
+  --bg: #0d0e12; --surface: #18191f; --surface-2: #22242c; --text: #f2f3f7; --ink: #f2f3f7; --muted: #9a9fb0; --line: #2a2c35;
+  --primary: #7474ff; --primary-2: #a970ff; --primary-soft: #262650; --on-primary: #0d0e12; --hl: #8a8aff;
+  --pen-red: #ff6b7d; --pen-blue: #8a8aff; --pen-green: #3fd69a; --ok: #3fd69a; --ok-soft: #13342a; --warn: #ffb547; --warn-soft: #3a2c14;
+  --danger: #ff6b7d; --danger-soft: #3d1c22; --ev: #4fd1ee; --ev-soft: #12323b; --rt: #3fd69a; --rt-soft: #13342a;
+  --soft: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+  --soft-lg: 0 10px 30px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+/* ---------- 全体 ---------- */
+:root[data-look="modern"] body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  background: var(--bg); background-image: none; padding-bottom: calc(110px + var(--safe-b));
+}
+:root[data-look="modern"] .top { background: color-mix(in srgb, var(--bg) 80%, transparent); border-bottom: 0; }
+:root[data-look="modern"] .top h1 {
+  font-family: inherit; font-weight: 800; font-size: 32px; letter-spacing: -.01em;
+  background: none; padding: 0; transform: none;
+}
+:root[data-look="modern"] .section-title, :root[data-look="modern"] .sub-title, :root[data-look="modern"] .dt-head,
+:root[data-look="modern"] .sheet h2, :root[data-look="modern"] .cal-head b, :root[data-look="modern"] .sched-head b,
+:root[data-look="modern"] .stat .n, :root[data-look="modern"] .ring .pct, :root[data-look="modern"] .bar-row span,
+:root[data-look="modern"] .tabs button, :root[data-look="modern"] .cal-grid.wd span, :root[data-look="modern"] .cal-cell .num,
+:root[data-look="modern"] .tl-hour span {
+  font-family: inherit; letter-spacing: 0;
+}
+:root[data-look="modern"] .section-title { color: var(--muted); font-weight: 700; }
+:root[data-look="modern"] .stat .n, :root[data-look="modern"] .ring .pct { font-weight: 800; }
+
+/* ---------- カード ---------- */
+:root[data-look="modern"] .summary, :root[data-look="modern"] .card, :root[data-look="modern"] .cal,
+:root[data-look="modern"] .timeline, :root[data-look="modern"] .day-tasks {
+  border: 0; border-radius: 22px; box-shadow: var(--soft); background: var(--surface);
+}
+:root[data-look="modern"] .card:nth-child(n) { border-radius: 20px; }
+:root[data-look="modern"] .card { transition: transform .2s ease, box-shadow .2s ease; }
+:root[data-look="modern"] .card:active { transform: scale(.98); box-shadow: var(--soft); }
+:root[data-look="modern"] .card.long { border: 0; box-shadow: inset 4px 0 0 var(--c), var(--soft); }
+:root[data-look="modern"] .evcard { border: 0; box-shadow: inset 4px 0 0 var(--ev), var(--soft); }
+:root[data-look="modern"] .card.done .title { text-decoration: line-through 1.5px var(--muted); }
+:root[data-look="modern"] .icon-btn { border: 0; border-radius: 50%; box-shadow: var(--soft); background: var(--surface); color: var(--text); fill: var(--muted); }
+:root[data-look="modern"] .icon-btn:active { transform: scale(.92); }
+
+:root[data-look="modern"] .hint { border: 0; border-radius: 18px; transform: none; box-shadow: none; background: var(--primary-soft); color: var(--text); }
+:root[data-look="modern"] .hint::before { display: none; }
+:root[data-look="modern"] .stat { border: 0; background: var(--surface-2); border-radius: 16px; }
+:root[data-look="modern"] .ring .bg { stroke: var(--surface-2); stroke-dasharray: none; }
+:root[data-look="modern"] .ring .fg { stroke: var(--primary); }
+:root[data-look="modern"] .now-banner { border: 0; box-shadow: none; border-radius: 16px; background: var(--grad); color: #fff; }
+:root[data-look="modern"] .now-banner .next, :root[data-look="modern"] .now-banner small, :root[data-look="modern"] .now-banner .go { color: rgba(255, 255, 255, .92); }
+:root[data-look="modern"] .badge { border: 0; border-radius: 999px; padding: 2px 9px; font-weight: 700; background: var(--surface-2); }
+:root[data-look="modern"] .badge.long { background: color-mix(in srgb, var(--c) 15%, transparent); }
+:root[data-look="modern"] .empty { border: 0; background: var(--surface); box-shadow: var(--soft); border-radius: 20px; }
+
+/* ---------- 進捗バー・チェック ---------- */
+:root[data-look="modern"] .bar { border: 0; height: 8px; background: var(--surface-2); border-radius: 99px; }
+:root[data-look="modern"] .bar > i { background: var(--grad); border-radius: 99px; }
+:root[data-look="modern"] .bar.full > i { background: linear-gradient(135deg, var(--ok), #4fd1a5); }
+:root[data-look="modern"] .pace-mark { background: var(--text); opacity: .5; width: 2px; top: -3px; bottom: -3px; }
+:root[data-look="modern"] .check { border: 2px solid var(--line); border-radius: 50%; background: transparent; transition: transform .2s, background .2s; }
+:root[data-look="modern"] .check svg { stroke: #fff; stroke-width: 3; }
+:root[data-look="modern"] .check.on { background: var(--grad); border-color: transparent; }
+:root[data-look="modern"] .check.on svg { stroke: #fff; }
+:root[data-look="modern"] .check.ghost { border-style: dashed; }
+
+/* ---------- ボタン・入力 ---------- */
+:root[data-look="modern"] .btn { border: 0; box-shadow: none; border-radius: 14px; background: var(--surface-2); color: var(--text); font-weight: 700; transition: transform .15s; }
+:root[data-look="modern"] .btn:active { transform: scale(.97); }
+:root[data-look="modern"] .btn.primary { background: var(--grad); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 35%, transparent); }
+:root[data-look="modern"] .btn.danger { background: var(--danger-soft); color: var(--danger); }
+:root[data-look="modern"] .btn.cal { background: var(--primary-soft); color: var(--primary); }
+:root[data-look="modern"] .chip { border: 0; background: var(--surface-2); border-radius: 999px; color: var(--text); }
+:root[data-look="modern"] .chip.on { background: var(--grad); color: #fff; }
+:root[data-look="modern"] .text-btn { color: var(--primary); text-decoration: none; }
+:root[data-look="modern"] .seg { border: 0; background: var(--surface-2); border-radius: 12px; }
+:root[data-look="modern"] .seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--soft); }
+:root[data-look="modern"] .field input[type=text], :root[data-look="modern"] .field input[type=date],
+:root[data-look="modern"] .field input[type=time], :root[data-look="modern"] .field textarea,
+:root[data-look="modern"] .field select, :root[data-look="modern"] .step-add input {
+  border: 1.5px solid transparent; background: var(--surface-2); border-radius: 12px;
+}
+:root[data-look="modern"] .field input:focus, :root[data-look="modern"] .field textarea:focus, :root[data-look="modern"] .field select:focus {
+  border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+:root[data-look="modern"] .field > label, :root[data-look="modern"] .field > .label { color: var(--muted); }
+:root[data-look="modern"] .step { border: 0; background: var(--surface-2); }
+:root[data-look="modern"] .day { border: 0; background: var(--surface-2); }
+:root[data-look="modern"] .day.on { background: var(--grad); color: #fff; }
+:root[data-look="modern"] .switch input { border: 0; }
+:root[data-look="modern"] .switch input:checked { background: var(--primary); }
+:root[data-look="modern"] .switch input::after { border: 0; top: 3px; left: 3px; }
+:root[data-look="modern"] input[type=range] { accent-color: var(--primary); }
+
+/* ---------- タブバー（浮かぶすりガラス） ---------- */
+:root[data-look="modern"] .tabs {
+  left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); padding: 6px;
+  border: 0; border-radius: 26px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: 0 8px 30px rgba(20, 22, 40, .14), inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+:root[data-look="modern"] .tabs button { font-weight: 700; border-radius: 20px; padding: 6px 0; transition: background .25s, color .25s; }
+:root[data-look="modern"] .tabs button.active { background: var(--primary-soft); color: var(--primary); }
+:root[data-look="modern"] .tabs button.active svg { background: none; padding: 0; margin: 0; animation: tab-pop .4s cubic-bezier(.34, 1.56, .64, 1); }
+:root[data-look="modern"] .fab {
+  border: 0; border-radius: 20px; background: var(--grad); color: #fff; box-shadow: var(--soft-lg);
+  bottom: calc(96px + var(--safe-b)); transition: transform .2s cubic-bezier(.34, 1.56, .64, 1);
+}
+:root[data-look="modern"] .fab:active { transform: scale(.9) rotate(90deg); box-shadow: var(--soft-lg); }
+:root[data-look="modern"] .toast { bottom: calc(170px + var(--safe-b)); background: #1d1f27; color: #fff; border: 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); border-radius: 999px; }
+
+/* ---------- シート ---------- */
+:root[data-look="modern"] .sheet { border: 0; background: var(--surface); background-image: none; border-radius: 28px 28px 0 0; }
+:root[data-look="modern"] .sheet .grab { background: var(--line); opacity: 1; }
+:root[data-look="modern"] .sheet::backdrop { background: rgba(10, 12, 20, .35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+
+/* ---------- カレンダー ---------- */
+:root[data-look="modern"] .cal-cell { border-top: 1px solid var(--line); }
+:root[data-look="modern"] .cal-cell.today .num { background: var(--grad); color: #fff; border: 0; border-radius: 50%; transform: none; }
+:root[data-look="modern"] .cal-cell.sel { background: var(--primary-soft); border-radius: 12px; }
+:root[data-look="modern"] .cal-head .icon-btn { box-shadow: none; background: var(--surface-2); }
+:root[data-look="modern"] .cl { border: 0; border-radius: 5px; }
+
+/* ---------- スケジュール ---------- */
+:root[data-look="modern"] .sched-head .icon-btn { background: var(--surface); box-shadow: var(--soft); }
+:root[data-look="modern"] .sug-box { border: 0; transform: none; border-radius: 20px; box-shadow: none; color: var(--text);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 12%, var(--surface)), color-mix(in srgb, var(--primary-2) 12%, var(--surface))); }
+:root[data-look="modern"] .sug-box .note { color: var(--muted); }
+:root[data-look="modern"] .tl-hour { border-top: 1px solid var(--line); }
+:root[data-look="modern"] .tl-block { border: 0; border-left: 4px solid; border-radius: 12px; box-shadow: none; }
+:root[data-look="modern"] .tl-block.plan { background: var(--primary-soft); }
+:root[data-look="modern"] .tl-block.sug {
+  border: 1.5px dashed var(--primary); border-left: 4px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+:root[data-look="modern"] .tl-due { border-top: 1.5px dashed var(--danger); }
+:root[data-look="modern"] .tl-due span { border: 0; background: var(--danger); color: #fff; border-radius: 999px; }
+:root[data-look="modern"] .dt-row { border-top: 1px solid var(--line); }
+:root[data-look="modern"] .dt-place { background: var(--grad); color: #fff; }
+
+/* ---------- 演出（モダン版） ---------- */
+:root[data-look="modern"] .onion { display: none; }
+:root[data-look="modern"] .stamp {
+  --r: 0deg !important;
+  font-family: inherit; font-weight: 800; font-size: 22px; color: #fff; border: 0; border-radius: 999px;
+  padding: 12px 24px; background: var(--grad); box-shadow: var(--soft-lg);
+}
+@keyframes tab-pop { 0% { transform: scale(.8); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+:root[data-look="modern"] .tl-block.event { border-left-color: var(--ev); }
+:root[data-look="modern"] .tl-block.routine { border-left-color: var(--rt); }
+:root[data-look="modern"] .tl-block.plan { border-left-color: var(--primary); }
