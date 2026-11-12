@@ -1033,7 +1033,7 @@
   }
 
   // 期限の近さ・遅れ具合からTodoの優先度を決めて、空き時間に入れていく
-  function suggest(ds, only) {
+  function suggest(ds, only, excluded) {
     const day = parseDay(ds);
     const endOfDay = addDays(day, 1);
     const isToday = ds === todayStr();
@@ -1059,7 +1059,8 @@
       }
       const full = t.est || 60;
       return { t, score, reason, title, stepId, dur: Math.min(full, DAY_CAP), full };
-    }).filter((c) => !planned.has(`${c.t.id}|${c.stepId}`) && (!only || c.t.id === only)).sort((a, b) => b.score - a.score);
+    }).filter((c) => !planned.has(`${c.t.id}|${c.stepId}`) && (!only || c.t.id === only) && !(excluded && excluded.has(c.t.id)))
+      .sort((a, b) => b.score - a.score);
 
     const slots = freeSlots(ds);
     const out = [];
@@ -1193,7 +1194,7 @@
     // 最初から空き時間にTodoを入れた案を見せる（まだ何も決めていない日だけ）
     if ((!suggestion || suggestion.date !== ds) && ds >= ts && !(state.plans[ds] || []).length && !autoOff.has(ds)) {
       const bl = suggest(ds);
-      suggestion = bl.length ? { date: ds, blocks: bl, auto: true } : null;
+      suggestion = bl.length ? { date: ds, blocks: bl, auto: true, excluded: new Set() } : null;
       if (!bl.length) autoOff.add(ds);
     }
     const items = dayItems(ds);
@@ -1630,7 +1631,7 @@
     if (e.target.closest("[data-sched-today]")) { schedDate = todayStr(); render(); return; }
     if (e.target.closest("[data-suggest]")) {
       const blocks = suggest(schedDate);
-      suggestion = { date: schedDate, blocks };
+      suggestion = { date: schedDate, blocks, excluded: new Set() };
       if (blocks.length) fx.burst(at[0], at[1]);
       if (!blocks.length) toast(say("入れられるTodoが見つかりませんでした", "いれられるのなかったよー"));
       render(); return;
@@ -1647,11 +1648,18 @@
       if (!bl.length) { toast("入れられる空き時間がありませんでした"); return; }
       state.plans[schedDate] = [...(state.plans[schedDate] || []), ...bl];
       save();
-      if (suggestion && suggestion.date === schedDate) suggestion.blocks = suggest(schedDate);
+      if (suggestion && suggestion.date === schedDate) suggestion.blocks = suggest(schedDate, null, suggestion.excluded);
       render(); fx.burst(at[0], at[1]); toast(say(`${bl[0].start}〜に入れました`, `${bl[0].start}からにいれといたよー`)); return;
     }
     const sg = e.target.closest("[data-sug]");
-    if (sg) { suggestion.blocks = suggestion.blocks.filter((b) => b.id !== sg.dataset.sug); toast("提案から外しました"); render(); return; }
+    if (sg) {
+      // 外したタスクの分を空けて、残りを優先度順に詰め直す（時間が余れば次のタスクも入る）
+      const b = suggestion.blocks.find((x) => x.id === sg.dataset.sug);
+      if (b) suggestion.excluded.add(b.taskId);
+      suggestion.blocks = suggest(schedDate, null, suggestion.excluded);
+      toast(say("外して、残りを詰めました", "はずしてつめといたよー"));
+      render(); return;
+    }
     const pc = e.target.closest("[data-plan-check]");
     if (pc) {
       togglePlan(schedDate, pc.dataset.planCheck);
