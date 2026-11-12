@@ -517,7 +517,7 @@
       </div>
       <div class="field" id="f-progress-field"><label for="f-progress">進捗 <b id="f-pv">${t.progress}%</b></label>
         <input type="range" id="f-progress" min="0" max="100" step="5" value="${t.progress}"></div>
-      <div class="field"><label for="f-est" id="f-est-label">かかる時間の目安（Todo提案で使います）</label><select id="f-est">${EST_OPTS.map((v) => `<option value="${v}" ${(t.est || 60) === v ? "selected" : ""}>${durText(v)}</option>`).join("")}</select></div>
+      <div class="field"><label for="f-est" id="f-est-label">かかる時間の目安（Todo提案で使います）</label><select id="f-est">${[...new Set([...EST_OPTS, t.est || 60])].sort((a, b) => a - b).map((v) => `<option value="${v}" ${(t.est || 60) === v ? "selected" : ""}>${durText(v)}</option>`).join("")}</select></div>
       <div class="field"><label for="f-remind">通知</label><select id="f-remind">${opts}</select></div>
       <div class="field"><label for="f-memo">メモ</label><textarea id="f-memo" placeholder="任意">${esc(t.memo)}</textarea></div>
       <div class="actions">
@@ -851,7 +851,7 @@
   }
 
   /* ---------- 予定（イベント） ---------- */
-  const EST_OPTS = [15, 30, 45, 60, 90, 120, 180, 240];
+  const EST_OPTS = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 420, 480, 600, 720];
   function durText(m) { return m < 60 ? `${m}分` : `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + "分" : ""}`; }
   const fmtMin = (m) => { m = Math.min(Math.max(m, 0), 1439); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
   const icsDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
@@ -1061,18 +1061,38 @@
     const slots = freeSlots(ds);
     const out = [];
     const GAP = 10; // Todoの間に少し休憩をはさむ
+    const MIN_PART = 30; // 分けるときの1回の最短
+    let placedTasks = 0;
     for (const c of cands) {
-      if (out.length >= 6) break;
-      for (const slot of slots) {
-        const len = slot[1] - slot[0];
-        if (len >= c.dur || (len >= 30 && c.score >= 800)) {
-          const d = Math.min(c.dur, len);
-          out.push({ id: uid(), taskId: c.t.id, stepId: c.stepId, title: c.title, reason: c.reason + (d < c.dur ? "・途中まで" : ""),
-            start: fmtMin(slot[0]), end: fmtMin(slot[0] + d), done: false });
-          slot[0] += d + GAP;
-          break;
+      if (placedTasks >= 6) break;
+      // まずは1つの空き時間にまるごと入るところを探す
+      const whole = slots.find((sl) => sl[1] - sl[0] >= c.dur);
+      let parts = [];
+      if (whole) parts.push([whole, c.dur]);
+      else {
+        // 入りきらない長いタスクは、いくつかの空き時間に分けて入れる
+        let rest = c.dur;
+        for (const sl of slots) {
+          const len = sl[1] - sl[0];
+          if (len < MIN_PART) continue;
+          const take = Math.min(rest, len);
+          parts.push([sl, take]);
+          rest -= take;
+          if (rest <= 0) break;
         }
       }
+      if (!parts.length) continue;
+      const total = parts.reduce((a, [, d]) => a + d, 0);
+      const short = total < c.dur;
+      parts.forEach(([sl, d], i) => {
+        const label = parts.length > 1 ? `（${i + 1}/${parts.length}）` : "";
+        const last = i === parts.length - 1;
+        out.push({ id: uid(), taskId: c.t.id, stepId: c.stepId, title: c.title + label,
+          reason: c.reason + (short && last ? `・のこり${durText(c.dur - total)}` : ""),
+          start: fmtMin(sl[0]), end: fmtMin(sl[0] + d), done: false });
+        sl[0] += d + GAP;
+      });
+      placedTasks++;
     }
     return out.sort((a, b) => a.start.localeCompare(b.start));
   }
