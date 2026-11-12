@@ -155,3 +155,55 @@
 :root[data-look="kotan"][data-theme="dark"] .top { background: color-mix(in srgb, #6a280c 85%, transparent); }
 :root[data-look="kotan"][data-theme="dark"] .fab { background: var(--grad); color: #fff; }
 :root[data-look="kotan"][data-theme="dark"] .tabs { background: color-mix(in srgb, #261a12 86%, transparent); }
+
+/* =========================================================
+   コタン（マスコット）と吹き出し
+   ========================================================= */
+.kotan-hero { display: flex; align-items: flex-end; justify-content: flex-end; gap: 10px; margin: 0 0 12px; min-height: 104px; }
+.kotan-bubble {
+  position: relative; background: var(--surface); color: var(--text);
+  border-radius: 20px; padding: 11px 16px; font-weight: 700; font-size: 15.5px; line-height: 1.45;
+  box-shadow: 0 6px 18px rgba(150, 60, 0, .18); max-width: 68%; margin-bottom: 34px; cursor: pointer;
+  animation: bubble-in .4s cubic-bezier(.34, 1.56, .64, 1) both; word-break: break-word;
+}
+.kotan-hero .kotan-bubble::after {
+  content: ""; position: absolute; right: -9px; bottom: 16px;
+  border: 9px solid transparent; border-left-color: var(--surface); border-right: 0;
+}
+.kotan-pic { border: 0; background: none; padding: 0; cursor: pointer; flex: none; transform-origin: 50% 100%; }
+.kotan-pic img { display: block; height: 124px; width: auto; max-width: 150px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(120, 50, 0, .25)); }
+.kotan-pic img, .kotan-pic .kotan-ph { animation: kotan-sway 3.2s ease-in-out infinite; transform-origin: 50% 100%; }
+.kotan-ph { font-size: 76px; line-height: 1; display: block; }
+.kotan-pic.hop img, .kotan-pic.hop .kotan-ph { animation: kotan-hop .55s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes kotan-sway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg) translateY(-2px); } }
+@keyframes kotan-hop { 0% { transform: translateY(0) scale(1, 1); } 25% { transform: translateY(0) scale(1.08, .9); } 55% { transform: translateY(-22px) scale(.95, 1.06); } 100% { transform: none; } }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(6px) scale(.9); } to { opacity: 1; transform: none; } }
+
+/* 完了したときに下から出てくる */
+.kotan-pop {
+  position: fixed; left: 10px; bottom: calc(92px + var(--safe-b)); z-index: 42; pointer-events: none;
+  display: flex; align-items: flex-end; gap: 6px;
+  animation: kotan-up .5s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+.kotan-pop img { display: block; height: 140px; width: auto; max-width: 160px; object-fit: contain; filter: drop-shadow(0 8px 14px rgba(120, 50, 0, .3)); }
+.kotan-pop .kotan-ph { font-size: 84px; }
+.kotan-pop .kotan-bubble { margin-bottom: 70px; max-width: 200px; font-size: 17px; animation-delay: .15s; }
+.kotan-pop .kotan-bubble::after {
+  content: ""; position: absolute; left: -9px; bottom: 16px;
+  border: 9px solid transparent; border-right-color: var(--surface); border-left: 0;
+}
+.kotan-pop.out { animation: kotan-down .45s ease-in forwards; }
+@keyframes kotan-up { from { transform: translateY(220px); } to { transform: none; } }
+@keyframes kotan-down { to { transform: translateY(240px); opacity: 0; } }
+
+/* メニューの画像えらび */
+.kotan-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kslot { display: grid; justify-items: center; gap: 4px; background: var(--surface-2); border-radius: 16px; padding: 10px 8px; }
+.kslot small { color: var(--muted); font-size: 11.5px; margin-top: -4px; }
+.kthumb { width: 84px; height: 84px; display: grid; place-items: center; border-radius: 14px;
+  background: repeating-conic-gradient(#f3e3d3 0 25%, #fff 0 50%) 50% / 16px 16px; overflow: hidden; }
+.kthumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.kthumb span { font-size: 40px; }
+.kbtns { display: flex; gap: 6px; }
+.kbtns .chip { font-size: 12.5px; padding: 4px 10px; }
+.kslot .chip { background: var(--surface); }
