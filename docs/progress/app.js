@@ -26,6 +26,7 @@
   let calSelected = ymd(new Date());
   let schedDate = ymd(new Date());
   let suggestion = null; // { date, blocks } まだ決定していないTodo提案
+  const autoOff = new Set(); // 自動提案を「やめる」した日
 
   function load() {
     let d = { tasks: [], routines: [] };
@@ -270,7 +271,7 @@
     const pc = pace(t);
     if (pc) meta += `<span class="badge ${pc.cls}">${pc.label}</span>`;
     if (long && t.steps.length) meta += `<span>ステップ ${t.steps.filter((s) => s.done).length}/${t.steps.length}</span>`;
-    if (!t.done && t.calAdded && t.due && t.remind >= 0) meta += `<span class="badge cal">🔔通知</span>`;
+    if (!t.done && t.calAdded && t.due && t.remind >= 0) meta += `<span class="badge bell">🔔通知</span>`;
     let next = "";
     if (long && !t.done) {
       const s = t.steps.find((x) => !x.done);
@@ -286,7 +287,7 @@
     const s = streak(r);
     const meta = `<span>⏰ ${timeRange(r)}</span><span>${daysLabel(r.days)}</span>` +
       (s > 0 ? `<span class="badge ok">🔥 ${s}回連続</span>` : "") +
-      (r.calAdded ? `<span class="badge cal">🔔通知</span>` : "");
+      (r.calAdded ? `<span class="badge bell">🔔通知</span>` : "");
     const check = checkable
       ? `<button class="check ${done ? "on" : ""}" data-toggle-routine="${r.id}" data-date="${ds}" aria-label="やった">${CHECK_SVG}</button>`
       : `<div class="check ghost" aria-hidden="true"></div>`;
@@ -550,7 +551,12 @@
       $("#f-step-new", f).onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addStep(); } };
       $("#f-steps", f).addEventListener("click", (e) => {
         const tg = e.target.closest("[data-step-toggle]");
-        if (tg) { const s = steps[Number(tg.dataset.stepToggle)]; s.done = !s.done; paintSteps(); return; }
+        if (tg) {
+          const at = fx.point(e);
+          const s = steps[Number(tg.dataset.stepToggle)]; s.done = !s.done; paintSteps();
+          if (s.done) fx.burst(at[0], at[1]);
+          return;
+        }
         const dl = e.target.closest("[data-step-del]");
         if (dl) { steps.splice(Number(dl.dataset.stepDel), 1); paintSteps(); }
       });
@@ -795,7 +801,7 @@
   function eventCard(ev) {
     const meta = (ev.place ? `<span>📍 ${esc(ev.place)}</span>` : "") +
       (ev.repeat === "weekly" ? `<span class="badge">毎週${WD[parseDay(ev.date).getDay()]}曜</span>` : "") +
-      (ev.calAdded ? `<span class="badge cal">🔔通知</span>` : "") + (ev.memo ? `<span>📝 メモあり</span>` : "");
+      (ev.calAdded ? `<span class="badge bell">🔔通知</span>` : "") + (ev.memo ? `<span>📝 メモあり</span>` : "");
     return `<div class="card evcard" data-event="${ev.id}">
       <div class="ev-time">${ev.allDay ? "終日" : `${ev.start}<small>${ev.end}</small>`}</div>
       <div class="body"><div class="title">${esc(ev.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div></div>`;
@@ -959,7 +965,7 @@
   }
 
   // 期限の近さ・遅れ具合からTodoの優先度を決めて、空き時間に入れていく
-  function suggest(ds) {
+  function suggest(ds, only) {
     const day = parseDay(ds);
     const endOfDay = addDays(day, 1);
     const isToday = ds === todayStr();
@@ -984,7 +990,7 @@
         if (s) { title = `${t.title}：${s.title}`; stepId = s.id; }
       }
       return { t, score, reason, title, stepId, dur: t.est || 60 };
-    }).filter((c) => !planned.has(`${c.t.id}|${c.stepId}`)).sort((a, b) => b.score - a.score);
+    }).filter((c) => !planned.has(`${c.t.id}|${c.stepId}`) && (!only || c.t.id === only)).sort((a, b) => b.score - a.score);
 
     const slots = freeSlots(ds);
     const out = [];
@@ -1058,10 +1064,49 @@
     });
   }
 
+  function dayTaskPanel(ds, sug) {
+    const ts = todayStr();
+    const d = parseDay(ds);
+    const lim = ymd(addDays(d, 3));
+    const list = state.tasks.filter((t) => !t.done && t.due && !(isLong(t) && t.start && t.start > ds)).filter((t) => {
+      const dd = t.due.slice(0, 10);
+      if (isLong(t)) return dd >= ds;
+      return (ds === ts && dd < ds) || (dd >= ds && dd <= lim);
+    }).sort((a, b) => a.due.localeCompare(b.due));
+    const planned = {};
+    (state.plans[ds] || []).forEach((p) => { if (!planned[p.taskId]) planned[p.taskId] = p; });
+    const sugBy = {};
+    sug.forEach((b) => { const o = suggestion.blocks.find((x) => x.id === b.id); if (o && !sugBy[o.taskId]) sugBy[o.taskId] = o; });
+    const rows = list.map((t) => {
+      const due = parseLocal(t.due);
+      const r = remaining(due);
+      const step = isLong(t) ? t.steps.find((x) => !x.done) : null;
+      const p = planned[t.id], sg = sugBy[t.id];
+      const right = p ? `<span class="badge bell">📌 ${p.start}〜</span>`
+        : sg ? `<span class="badge">💡 ${sg.start}〜</span>`
+        : `<button class="chip dt-place" data-place="${t.id}">＋入れる</button>`;
+      return `<div class="dt-row ${isLong(t) ? "long" : ""}" data-task="${t.id}" ${isLong(t) ? `style="--c:${longColor(t)}"` : ""}>
+        <button class="check sm" data-toggle-task="${t.id}" aria-label="完了にする">${CHECK_SVG}</button>
+        <div class="dt-body"><b>${esc(t.title)}</b>
+          <small>〆 ${fmtDue(due)}・<span class="${r.cls}">${r.text}</span>${step ? `・次：${esc(step.title)}` : ""}</small></div>
+        ${right}</div>`;
+    }).join("");
+    return `<section class="day-tasks">
+      <div class="dt-head">📝 ${ds === ts ? "今日" : "この日"}のタスク <small>${list.length}件</small></div>
+      ${list.length ? rows : `<p class="note">期限が近いタスクはありません</p>`}
+    </section>`;
+  }
+
   function renderSchedule() {
     const ds = schedDate;
     const d = parseDay(ds);
     const ts = todayStr();
+    // 最初から空き時間にTodoを入れた案を見せる（まだ何も決めていない日だけ）
+    if ((!suggestion || suggestion.date !== ds) && ds >= ts && !(state.plans[ds] || []).length && !autoOff.has(ds)) {
+      const bl = suggest(ds);
+      suggestion = bl.length ? { date: ds, blocks: bl, auto: true } : null;
+      if (!bl.length) autoOff.add(ds);
+    }
     const items = dayItems(ds);
     const sug = suggestion && suggestion.date === ds
       ? suggestion.blocks.map((b) => ({ kind: "sug", id: b.id, title: b.title, start: b.start, end: b.end, s: toMin(b.start), e: endMin(b.start, b.end), sub: b.reason }))
@@ -1072,6 +1117,8 @@
     let [from, to] = [toMin(state.settings.wake), toMin(state.settings.sleep)];
     if (to <= from) to = 1440;
     all.forEach((i) => { from = Math.min(from, i.s); to = Math.max(to, i.e); });
+    const dueHere = state.tasks.filter((t) => !t.done && t.due && t.due.slice(0, 10) === ds);
+    dueHere.forEach((t) => { const m = toMin(t.due.slice(11, 16)); from = Math.min(from, m); to = Math.max(to, m + 30); });
     from = Math.floor(from / 60) * 60;
     to = Math.min(1440, Math.ceil(to / 60) * 60);
     const PX = 1.1; // 1分あたりのピクセル
@@ -1103,6 +1150,10 @@
           style="top:${(i.s - from) * PX}px;height:${h - 2}px;left:calc(46px + (100% - 50px) * ${i.lane} / ${n});width:calc((100% - 50px) / ${n} - 3px)">
         ${check}<div class="tl-text"><b>${esc(i.title)}</b><small>${i.start}〜${i.end === "23:59" ? "24:00" : i.end}・${kindName[i.kind]}${i.sub ? "・" + esc(i.sub) : ""}</small></div></div>`;
     }).join("");
+    const dueLines = dueHere.map((t) => {
+      const m = toMin(t.due.slice(11, 16));
+      return `<div class="tl-due" style="top:${(m - from) * PX}px" data-task="${t.id}"><span>〆 ${t.due.slice(11, 16)} ${esc(t.title)}</span></div>`;
+    }).join("");
     let nowLine = "";
     if (ds === ts) {
       const n = new Date();
@@ -1115,24 +1166,98 @@
     const plansNeedCal = plans.some((p) => !p.done && !p.calAdded) && ds >= ts;
     const sugBox = sug.length ? `
       <section class="sug-box">
-        <b>💡 おすすめのTodo ${sug.length}件</b>
-        <p class="note">期限が近いもの・遅れているものから、空き時間に入れました。点線の枠が提案です。いらないものはタップで外せます。</p>
-        <div class="actions"><button class="btn" data-sug-cancel>やめる</button><button class="btn primary" data-sug-accept>この内容で決定</button></div>
+        <b>💡 ${suggestion.auto ? "空き時間にタスクを入れてみました" : "おすすめのTodo"}（${sug.length}件）</b>
+        <p class="note">期限が近いもの・遅れているものから入れています。点線の枠が提案です。いらないものはタップで外して、「決定」で確定します。</p>
+        <div class="actions"><button class="btn" data-sug-cancel>今日はいいや</button><button class="btn primary" data-sug-accept>この内容で決定</button></div>
       </section>`
       : `<button class="btn primary wide" data-suggest>💡 ${ds === ts ? "今日" : "この日"}のTodoを提案して</button>`;
 
     main.innerHTML = `
       <div class="sched-head">
         <button class="icon-btn sm" data-sched-move="-1" aria-label="前の日">‹</button>
-        <div><b>${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）</b>${ds === ts ? `<span class="badge cal">今日</span>` : `<button class="text-btn" data-sched-today>今日へ</button>`}</div>
+        <div><b>${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）</b>${ds === ts ? `<span class="badge bell">今日</span>` : `<button class="text-btn" data-sched-today>今日へ</button>`}</div>
         <button class="icon-btn sm" data-sched-move="1" aria-label="次の日">›</button>
       </div>
       <p class="note sched-note">空き時間 ${durText(free) || "0分"}（${state.settings.wake}〜${state.settings.sleep}で計算）</p>
       ${sugBox}
-      ${plansNeedCal && !sug.length ? `<button class="btn cal" data-plan-cal>🔔 Todoの時刻に通知する（カレンダーに追加）</button>` : ""}
+      ${plansNeedCal && !sug.length ? `<button class="btn cal" data-plan-cal>🔔 Todoの時刻に通知する</button>` : ""}
       ${allDay.length ? `<div class="allday">${allDay.map((ev) => `<button class="chip ev" data-event="${ev.id}">終日・${esc(ev.title)}</button>`).join("")}</div>` : ""}
-      <section class="timeline" style="height:${(to - from) * PX + 16}px">${hours}${blocks}${nowLine}</section>
+      ${dayTaskPanel(ds, sug)}
+      <section class="timeline" style="height:${(to - from) * PX + 16}px">${hours}${blocks}${dueLines}${nowLine}</section>
       ${!all.length ? `<p class="note" style="text-align:center;margin-top:10px">右下の ＋ から予定を入れるか、「Todoを提案して」を押してみてください</p>` : ""}`;
+  }
+
+  /* ---------- 演出（パラパラ漫画っぽい動き） ---------- */
+  const reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const INKS = ["#e8413a", "#2f6fd6", "#ffbf1a", "#22a06b", "#ff6fb0"];
+  const PRAISE = ["できた！", "えらい！", "ナイス！", "すごい！", "やったね！"];
+  let enterTimer, slideTimer;
+  const fx = {
+    // 押したボタンの真ん中（描き直す前に取っておく）
+    point(e) {
+      const b = e && e.target && e.target.closest && e.target.closest("button, .card, .dt-row");
+      if (b) { const r = b.getBoundingClientRect(); return [r.left + Math.min(r.width / 2, 40), r.top + r.height / 2]; }
+      return [(e && e.clientX) || innerWidth / 2, (e && e.clientY) || innerHeight / 2];
+    },
+    // 線・星・丸がはじける
+    burst(x, y, big) {
+      if (reduceMotion) return;
+      const n = big ? 14 : 9;
+      const el = document.createElement("div");
+      el.className = "burst";
+      el.style.left = x + "px"; el.style.top = y + "px";
+      let html = "";
+      for (let i = 0; i < n; i++) {
+        const a = (360 / n) * i + Math.random() * 18;
+        const dist = (big ? 54 : 34) + Math.random() * 20;
+        html += `<i class="b${i % 3}" style="--a:${a}deg;--d:${dist}px;--c:${INKS[i % INKS.length]}"></i>`;
+      }
+      el.innerHTML = html;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 900);
+    },
+    // ハンコがポンと押される
+    stamp(text) {
+      if (reduceMotion) return;
+      document.querySelectorAll(".stamp").forEach((x) => x.remove());
+      const el = document.createElement("div");
+      el.className = "stamp";
+      el.textContent = text || PRAISE[Math.floor(Math.random() * PRAISE.length)];
+      el.style.setProperty("--r", `${-12 + Math.random() * 10}deg`);
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1300);
+    },
+    // ページをめくったとき、前のページがうっすら残って消える（オニオンスキン）
+    onion(oldHTML) {
+      if (reduceMotion || !oldHTML) return;
+      const g = document.createElement("div");
+      g.className = "onion";
+      g.setAttribute("aria-hidden", "true");
+      g.innerHTML = oldHTML;
+      main.appendChild(g);
+      setTimeout(() => g.remove(), 520);
+      fx.enter();
+    },
+    enter() {
+      if (reduceMotion) return;
+      main.classList.remove("enter"); void main.offsetWidth; main.classList.add("enter");
+      clearTimeout(enterTimer); enterTimer = setTimeout(() => main.classList.remove("enter"), 900);
+    },
+    slide(dir) {
+      if (reduceMotion) return;
+      main.classList.remove("slide-l", "slide-r"); void main.offsetWidth;
+      main.classList.add(dir > 0 ? "slide-l" : "slide-r");
+      clearTimeout(slideTimer); slideTimer = setTimeout(() => main.classList.remove("slide-l", "slide-r"), 500);
+    },
+    // 描き直したあとのチェックに「描く」アニメーションをつける
+    mark(sel) { const el = main.querySelector(sel); if (el) el.classList.add("just"); },
+  };
+  function goTab(name) {
+    const old = main.innerHTML;
+    tab = name;
+    render();
+    window.scrollTo(0, 0);
+    fx.onion(old);
   }
 
   /* ---------- 操作 ---------- */
@@ -1144,27 +1269,37 @@
   }
 
   main.addEventListener("click", (e) => {
+    const at = fx.point(e);
     const tt = e.target.closest("[data-toggle-task]");
     if (tt) {
       const t = state.tasks.find((x) => x.id === tt.dataset.toggleTask);
       t.done = !t.done;
       t.doneAt = t.done ? Date.now() : 0;
-      if (t.done) { if (!isLong(t) || !t.steps.length) t.progress = 100; toast(t.calAdded ? "完了！（カレンダーの通知は必要なら削除してください）" : "完了！おつかれさま 🎉"); }
+      if (t.done) { if (!isLong(t) || !t.steps.length) t.progress = 100; if (t.calAdded) toast("カレンダーの通知は必要なら削除してください"); }
       else if (t.progress >= 100) t.progress = 90;
-      save(); render(); return;
+      save(); render();
+      if (t.done) { fx.burst(at[0], at[1], true); fx.stamp(); fx.mark(`[data-toggle-task="${t.id}"]`); }
+      return;
     }
     const tr = e.target.closest("[data-toggle-routine]");
     if (tr) {
       const r = state.routines.find((x) => x.id === tr.dataset.toggleRoutine);
       const ds = tr.dataset.date || todayStr();
       if (r.doneDates.includes(ds)) r.doneDates = r.doneDates.filter((d) => d !== ds);
-      else { r.doneDates.push(ds); r.doneDates = r.doneDates.sort().slice(-400); const s = streak(r); toast(s > 1 ? `🔥 ${s}回連続！` : "できた！"); }
-      save(); render(); return;
+      else { r.doneDates.push(ds); r.doneDates = r.doneDates.sort().slice(-400); }
+      const nowDone = r.doneDates.includes(ds);
+      save(); render();
+      if (nowDone) {
+        const st = streak(r);
+        fx.burst(at[0], at[1], st > 1); fx.mark(`[data-toggle-routine="${r.id}"][data-date="${ds}"]`);
+        if (st > 1) fx.stamp(`🔥${st}回連続！`);
+      }
+      return;
     }
     const f = e.target.closest("[data-filter]");
     if (f) { taskFilter = f.dataset.filter; render(); return; }
     const mv = e.target.closest("[data-cal-move]");
-    if (mv) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + Number(mv.dataset.calMove), 1); render(); return; }
+    if (mv) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + Number(mv.dataset.calMove), 1); render(); fx.slide(Number(mv.dataset.calMove)); return; }
     if (e.target.closest("[data-cal-today]")) { calMonth = firstOfMonth(new Date()); calSelected = todayStr(); render(); return; }
     const day = e.target.closest("[data-day]");
     if (day) {
@@ -1174,32 +1309,47 @@
       render(); return;
     }
     const go = e.target.closest("[data-goto]");
-    if (go) { tab = go.dataset.goto; if (tab === "schedule") schedDate = todayStr(); render(); window.scrollTo(0, 0); return; }
+    if (go) { if (go.dataset.goto === "schedule") schedDate = todayStr(); goTab(go.dataset.goto); return; }
     const os = e.target.closest("[data-open-schedule]");
-    if (os) { schedDate = os.dataset.openSchedule; tab = "schedule"; render(); window.scrollTo(0, 0); return; }
+    if (os) { schedDate = os.dataset.openSchedule; goTab("schedule"); return; }
     const ae = e.target.closest("[data-add-event]");
     if (ae) { eventSheet(null, ae.dataset.addEvent); return; }
     const evc = e.target.closest("[data-event]");
     if (evc) { eventSheet(state.events.find((x) => x.id === evc.dataset.event)); return; }
     const sm = e.target.closest("[data-sched-move]");
-    if (sm) { schedDate = ymd(addDays(parseDay(schedDate), Number(sm.dataset.schedMove))); render(); return; }
+    if (sm) { schedDate = ymd(addDays(parseDay(schedDate), Number(sm.dataset.schedMove))); render(); fx.slide(Number(sm.dataset.schedMove)); return; }
     if (e.target.closest("[data-sched-today]")) { schedDate = todayStr(); render(); return; }
     if (e.target.closest("[data-suggest]")) {
       const blocks = suggest(schedDate);
       suggestion = { date: schedDate, blocks };
+      if (blocks.length) fx.burst(at[0], at[1]);
       if (!blocks.length) toast("入れられるTodoが見つかりませんでした");
       render(); return;
     }
     if (e.target.closest("[data-sug-accept]")) {
       state.plans[schedDate] = [...(state.plans[schedDate] || []), ...suggestion.blocks.map(({ reason, ...b }) => ({ ...b, reason }))];
       const n = suggestion.blocks.length;
-      suggestion = null; save(); render(); toast(`${n}件のTodoをスケジュールに入れました`); return;
+      suggestion = null; save(); render(); fx.burst(at[0], at[1], true); fx.stamp("けってい！"); return;
     }
-    if (e.target.closest("[data-sug-cancel]")) { suggestion = null; render(); return; }
+    if (e.target.closest("[data-sug-cancel]")) { autoOff.add(schedDate); suggestion = null; render(); return; }
+    const pt = e.target.closest("[data-place]");
+    if (pt) {
+      const bl = suggest(schedDate, pt.dataset.place);
+      if (!bl.length) { toast("入れられる空き時間がありませんでした"); return; }
+      state.plans[schedDate] = [...(state.plans[schedDate] || []), ...bl];
+      save();
+      if (suggestion && suggestion.date === schedDate) suggestion.blocks = suggest(schedDate);
+      render(); fx.burst(at[0], at[1]); toast(`${bl[0].start}〜に入れました`); return;
+    }
     const sg = e.target.closest("[data-sug]");
     if (sg) { suggestion.blocks = suggestion.blocks.filter((b) => b.id !== sg.dataset.sug); toast("提案から外しました"); render(); return; }
     const pc = e.target.closest("[data-plan-check]");
-    if (pc) { togglePlan(schedDate, pc.dataset.planCheck); return; }
+    if (pc) {
+      togglePlan(schedDate, pc.dataset.planCheck);
+      const p = (state.plans[schedDate] || []).find((x) => x.id === pc.dataset.planCheck);
+      if (p && p.done) { fx.burst(at[0], at[1], true); fx.stamp(); fx.mark(`[data-plan-check="${p.id}"]`); }
+      return;
+    }
     const pl = e.target.closest("[data-plan]");
     if (pl) { planSheet(schedDate, pl.dataset.plan); return; }
     if (e.target.closest("[data-plan-cal]")) {
@@ -1222,10 +1372,10 @@
     if (touchX === null) return;
     const dx = e.changedTouches[0].clientX - touchX;
     touchX = null;
-    if (Math.abs(dx) > 60) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + (dx < 0 ? 1 : -1), 1); render(); }
+    if (Math.abs(dx) > 60) { const dir = dx < 0 ? 1 : -1; calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + dir, 1); render(); fx.slide(dir); }
   }, { passive: true });
 
-  document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
+  document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { if (b.dataset.tab !== tab) goTab(b.dataset.tab); });
   $("#fab").onclick = () => {
     if (tab === "routines") routineSheet();
     else if (tab === "calendar" || tab === "schedule") addChooser(tab === "calendar" ? calSelected : schedDate);
@@ -1251,4 +1401,5 @@
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
   render();
+  fx.enter();
 })();
