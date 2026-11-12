@@ -1,0 +1,107 @@
+/* しんちょくノート：コタン（メニューの「見た目 → コタン」）
+ * オレンジと白を基本に、アンバー・ピーチ・コーラル・はちみつ色の類似色でまとめた、あたたかい見た目。
+ * 形はモダン（modern.css）と共通。テーマ「黒」のときは、こげ茶ベースの暗めの配色になる */
+
+:root[data-look="kotan"] {
+  --bg: #fff8f1;
+  --surface: #ffffff;
+  --surface-2: #fff0e2;
+  --text: #3a2414;
+  --ink: #3a2414;
+  --muted: #9a7a62;
+  --line: #f6e2cf;
+  --primary: #ff7a1a;
+  --primary-2: #ffb02e;
+  --primary-soft: #ffeedd;
+  --on-primary: #ffffff;
+  --hl: #ff7a1a;
+  --pen-red: #f0503c;
+  --pen-blue: #ff7a1a;
+  --pen-green: #4fb36b;
+  --ok: #3fa864;
+  --ok-soft: #e6f6ea;
+  --warn: #e88a00;
+  --warn-soft: #fff1d6;
+  --danger: #e8483a;
+  --danger-soft: #ffe5e0;
+  --ev: #ff8f6b;        /* コーラル */
+  --ev-soft: #ffeae2;
+  --rt: #e9a400;        /* はちみつ */
+  --rt-soft: #fff5d6;
+  --grad: linear-gradient(135deg, #ff6a1a, #ff9a2e 55%, #ffc23d);
+  --soft: 0 1px 2px rgba(120, 60, 10, .05), 0 8px 24px rgba(200, 100, 20, .10);
+  --soft-lg: 0 10px 28px rgba(255, 110, 20, .35);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look="kotan"]:not([data-theme="light"]) {
+    --bg: #1a120c; --surface: #261a12; --surface-2: #33241a; --text: #fff1e4; --ink: #fff1e4; --muted: #c4a289; --line: #3d2b1e;
+    --primary: #ff8a2e; --primary-2: #ffb547; --primary-soft: #3d2614; --on-primary: #1a120c; --hl: #ff8a2e;
+    --pen-red: #ff6b55; --pen-blue: #ff8a2e; --pen-green: #6fd08a; --ok: #6fd08a; --ok-soft: #1f3324; --warn: #ffb547; --warn-soft: #3d2c12;
+    --danger: #ff6b55; --danger-soft: #3f1f19; --ev: #ff9e7d; --ev-soft: #3d2219; --rt: #ffc93d; --rt-soft: #3a2e10;
+    --soft: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    --soft-lg: 0 10px 28px rgba(255, 120, 30, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-look="kotan"][data-theme="dark"] {
+  --bg: #1a120c; --surface: #261a12; --surface-2: #33241a; --text: #fff1e4; --ink: #fff1e4; --muted: #c4a289; --line: #3d2b1e;
+  --primary: #ff8a2e; --primary-2: #ffb547; --primary-soft: #3d2614; --on-primary: #1a120c; --hl: #ff8a2e;
+  --pen-red: #ff6b55; --pen-blue: #ff8a2e; --pen-green: #6fd08a; --ok: #6fd08a; --ok-soft: #1f3324; --warn: #ffb547; --warn-soft: #3d2c12;
+  --danger: #ff6b55; --danger-soft: #3f1f19; --ev: #ff9e7d; --ev-soft: #3d2219; --rt: #ffc93d; --rt-soft: #3a2e10;
+  --soft: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+  --soft-lg: 0 10px 28px rgba(255, 120, 30, .3);
+  color-scheme: dark;
+}
+
+/* ---------- 背景：夕焼けのようにほんのり ---------- */
+:root[data-look="kotan"] body {
+  font-family: "Zen Maru Gothic", -apple-system, "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(70% 40% at 100% 0%, rgba(255, 160, 60, .20), transparent 70%),
+    radial-gradient(60% 35% at 0% 25%, rgba(255, 110, 70, .10), transparent 70%);
+  background-attachment: fixed;
+}
+:root[data-look="kotan"] .top { background: color-mix(in srgb, var(--bg) 82%, transparent); }
+:root[data-look="kotan"] .top h1 {
+  font-weight: 900; letter-spacing: .01em;
+  background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+:root[data-look="kotan"] .section-title { color: var(--primary); }
+:root[data-look="kotan"] .section-title::before { content: "● "; font-size: 10px; vertical-align: 2px; color: var(--primary-2); }
+:root[data-look="kotan"] .stat .n, :root[data-look="kotan"] .ring .pct { color: var(--text); }
+:root[data-look="kotan"] .stat.danger .n { color: var(--danger); }
+:root[data-look="kotan"] .stat.warn .n { color: var(--warn); }
+
+/* ---------- 部品 ---------- */
+:root[data-look="kotan"] .summary {
+  background: linear-gradient(160deg, var(--surface) 60%, color-mix(in srgb, var(--primary-2) 12%, var(--surface)));
+}
+:root[data-look="kotan"] .ring .fg { filter: drop-shadow(0 2px 4px rgba(255, 120, 30, .35)); }
+:root[data-look="kotan"] .ring .fg { stroke: var(--primary); }
+:root[data-look="kotan"] .bar.full > i { background: linear-gradient(135deg, var(--ok), #9bd36a); }
+:root[data-look="kotan"] .check { border-color: color-mix(in srgb, var(--primary) 35%, var(--line)); }
+:root[data-look="kotan"] .card.done .title { text-decoration-color: var(--primary); }
+:root[data-look="kotan"] .badge.bell { background: var(--primary-soft); color: var(--primary); }
+:root[data-look="kotan"] .hint { background: linear-gradient(135deg, #ffe8d2, #fff3db); }
+:root[data-look="kotan"] .sug-box { background: linear-gradient(135deg, color-mix(in srgb, #ff6a1a 12%, var(--surface)), color-mix(in srgb, #ffc23d 16%, var(--surface))); }
+:root[data-look="kotan"] .tabs { box-shadow: 0 8px 30px rgba(200, 100, 20, .16), inset 0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent); }
+:root[data-look="kotan"] .fab:active { transform: scale(.9) rotate(90deg); }
+:root[data-look="kotan"] .cal-cell .sun, :root[data-look="kotan"] .cal-grid .sun { color: var(--danger); }
+:root[data-look="kotan"] .cal-grid .sat { color: #e08a00; }
+:root[data-look="kotan"] .cal-cell.sat { color: #e08a00; }
+:root[data-look="kotan"] .tl-now { border-top-color: var(--primary); }
+:root[data-look="kotan"] .tl-now::before { background: var(--primary); }
+
+@media (prefers-color-scheme: dark) {
+  :root[data-look="kotan"]:not([data-theme="light"]) .hint { background: linear-gradient(135deg, #3d2614, #3a2e10); }
+}
+:root[data-look="kotan"][data-theme="dark"] .hint { background: linear-gradient(135deg, #3d2614, #3a2e10); }
+
+/* ---------- 演出 ---------- */
+:root[data-look="kotan"] .stamp { background: var(--grad); }
+:root[data-look="kotan"] .check.just { animation: kotan-pop .45s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes kotan-pop { 0% { transform: scale(.5); } 60% { transform: scale(1.25); } 100% { transform: none; } }
+:root[data-look="kotan"] .section-title { justify-content: flex-start; gap: 6px; }
+:root[data-look="kotan"] .section-title > small, :root[data-look="kotan"] .section-title > .text-btn { margin-left: auto; }

@@ -713,10 +713,11 @@
     openSheet(`
       <h2>メニュー</h2>
       <div class="field"><span class="label">見た目</span>
-        <div class="seg seg3">
+        <div class="seg seg4">
           <button type="button" data-look-set="memo">📒 メモ帳</button>
           <button type="button" data-look-set="modern">✨ モダン</button>
           <button type="button" data-look-set="cyber">🌐 サイバー</button>
+          <button type="button" data-look-set="kotan">🍊 コタン</button>
         </div>
         <p class="note" id="m-look-note"></p></div>
       <div class="field"><span class="label">テーマ</span>
@@ -1221,11 +1222,11 @@
     const t = state.settings.theme;
     if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
-    const look = ["modern", "cyber"].includes(state.settings.look) ? state.settings.look : "memo";
+    const look = ["modern", "cyber", "kotan"].includes(state.settings.look) ? state.settings.look : "memo";
     const modern = look === "modern";
     document.documentElement.dataset.look = look;
     const dark = t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", look === "cyber" ? "#05060d" : modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", look === "cyber" ? "#05060d" : look === "kotan" ? (dark ? "#1a120c" : "#fff8f1") : modern ? (dark ? "#0d0e12" : "#f3f4f8") : (dark ? "#23262b" : "#fffbea")));
   }
   applyTheme();
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
@@ -1233,6 +1234,7 @@
   /* ---------- 演出（パラパラ漫画っぽい動き） ---------- */
   const reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const INKS_MEMO = ["#e8413a", "#2f6fd6", "#ffbf1a", "#22a06b", "#ff6fb0"];
+  const INKS_KOTAN = ["#ff6a1a", "#ffb02e", "#ff8f6b", "#ffd23d", "#ff4f3a"];
   const INKS_CYBER = ["#00e5ff", "#7df9ff", "#2f8bff", "#b8f6ff", "#39ff9f"];
   const PRAISE = ["できた！", "えらい！", "ナイス！", "すごい！", "やったね！"];
   let enterTimer, slideTimer;
@@ -1254,7 +1256,8 @@
       for (let i = 0; i < n; i++) {
         const a = (360 / n) * i + Math.random() * 18;
         const dist = (big ? 54 : 34) + Math.random() * 20;
-        const inks = document.documentElement.dataset.look === "cyber" ? INKS_CYBER : INKS_MEMO;
+        const lk = document.documentElement.dataset.look;
+        const inks = lk === "cyber" ? INKS_CYBER : lk === "kotan" ? INKS_KOTAN : INKS_MEMO;
         html += `<i class="b${i % 3}" style="--a:${a}deg;--d:${dist}px;--c:${inks[i % inks.length]}"></i>`;
       }
       el.innerHTML = html;
