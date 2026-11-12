@@ -407,25 +407,23 @@
     for (let i = 0; i < weeks * 7; i++) {
       const d = addDays(gridStart, i);
       const ds = ymd(d);
-      const dues = state.tasks.filter((t) => t.due && t.due.slice(0, 10) === ds);
-      const dots = dues.slice(0, 3).map((t) => {
-        const cls = t.done ? "done" : parseLocal(t.due) < now ? "over" : isLong(t) ? "long" : "";
-        return `<i class="dot ${cls}" ${isLong(t) && !t.done ? `style="background:${longColor(t)}"` : ""}></i>`;
-      }).join("") + (dues.length > 3 ? `<i class="more">+</i>` : "");
-      const evs = eventsOn(ds);
-      const evDots = evs.slice(0, 2).map(() => `<i class="dot ev"></i>`).join("") + (evs.length > 2 ? `<i class="more">+</i>` : "");
-      const bars = longs.filter((t) => longCovers(t, ds)).slice(0, 3).map((t) => {
-        const s = (t.start || t.due.slice(0, 10)) === ds || d.getDay() === 0;
-        const e = t.due.slice(0, 10) === ds || d.getDay() === 6;
-        return `<i class="span ${s ? "s" : ""} ${e ? "e" : ""} ${t.done ? "done" : ""}" style="background:${longColor(t)}"></i>`;
+      // マスの中に名前をそのまま並べる（長期タスク → 予定 → 期限のタスク）
+      const bars = longs.filter((t) => longCovers(t, ds)).map((t) => {
+        const st = (t.start || t.due.slice(0, 10)) === ds || d.getDay() === 0 || ds === ymd(gridStart);
+        const en = t.due.slice(0, 10) === ds || d.getDay() === 6;
+        return `<i class="cl long ${st ? "s" : "cont"} ${en ? "e" : ""} ${t.done ? "done" : ""}" style="--c:${longColor(t)}">${st ? esc(t.title) : ""}</i>`;
       }).join("");
+      const evs = eventsOn(ds).map((ev) => `<i class="cl ev">${esc(ev.title)}</i>`).join("");
+      const dues = state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds)
+        .sort((x, y) => x.due.localeCompare(y.due))
+        .map((t) => `<i class="cl task ${t.done ? "done" : parseLocal(t.due) < now ? "over" : ""}">${esc(t.title)}</i>`).join("");
       const sched = state.routines.filter((r) => isScheduled(r, d));
       const allDone = sched.length && ds <= ts && sched.every((r) => isDoneOn(r, ds));
       const cls = [d.getMonth() !== m ? "out" : "", ds === ts ? "today" : "", ds === calSelected ? "sel" : "",
         d.getDay() === 0 ? "sun" : d.getDay() === 6 ? "sat" : ""].join(" ");
       cells += `<button class="cal-cell ${cls}" data-day="${ds}">
         <span class="num">${d.getDate()}${allDone ? '<em class="rdone">✓</em>' : ""}</span>
-        <span class="spans">${bars}</span><span class="dots">${evDots}${dots}</span></button>`;
+        <span class="items">${bars}${evs}${dues}</span></button>`;
     }
 
     main.innerHTML = `
@@ -437,7 +435,7 @@
         </div>
         <div class="cal-grid wd">${WD.map((w, i) => `<span class="${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${w}</span>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
-        <div class="cal-legend"><span><i class="dot ev"></i>予定</span><span><i class="dot"></i>期限</span><span><i class="dot over"></i>期限切れ</span><span><i class="span s e" style="background:var(--primary)"></i>長期タスクの期間</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
+        <div class="cal-legend"><span><i class="lg ev"></i>予定</span><span><i class="lg task"></i>タスクの期限</span><span><i class="lg over"></i>期限切れ</span><span><i class="lg long"></i>長期タスクの期間</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
         ${calMonth.getTime() !== firstOfMonth(now).getTime() ? `<button class="text-btn" data-cal-today style="justify-self:center">今日に戻る</button>` : ""}
       </section>
       ${dayAgenda(calSelected)}`;

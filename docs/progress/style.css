@@ -371,3 +371,31 @@ input[type=range] { width: 100%; accent-color: var(--primary); height: 28px; }
 .tl-block.done b { text-decoration: line-through; }
 .tl-now { position: absolute; left: 40px; right: 0; margin-top: 8px; border-top: 2px solid var(--danger); z-index: 2; pointer-events: none; }
 .tl-now::before { content: ""; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); }
+
+/* ---- v4: カレンダーのマスに名前を表示 ---- */
+.cal { padding-left: 6px; padding-right: 6px; }
+.cal-grid { gap: 0; }
+.cal-cell {
+  grid-template-rows: auto 1fr; justify-items: stretch; align-content: start;
+  min-height: 74px; padding: 3px 1px 4px; border-radius: 0; border-top: 1px solid var(--line); gap: 2px;
+}
+.cal-cell .num { justify-self: center; width: 24px; height: 24px; font-size: 13px; }
+.cal-cell.sel { background: var(--primary-soft); border-radius: 8px; }
+.items { display: grid; gap: 2px; align-content: start; min-width: 0; }
+.cl {
+  display: block; font-style: normal; font-size: 9.5px; font-weight: 600; line-height: 1.2; text-align: left;
+  padding: 1px 2px; border-radius: 3px; word-break: break-all; overflow-wrap: anywhere; min-width: 0;
+}
+.cl.ev { background: var(--ev-soft); color: var(--ev); }
+.cl.task { background: var(--primary-soft); color: var(--primary); }
+.cl.task.over { background: var(--danger-soft); color: var(--danger); }
+.cl.done { opacity: .45; text-decoration: line-through; }
+.cl.long { background: var(--c); color: #fff; border-radius: 0; margin: 0 -1px; }
+.cl.long.s { border-top-left-radius: 3px; border-bottom-left-radius: 3px; margin-left: 1px; }
+.cl.long.e { border-top-right-radius: 3px; border-bottom-right-radius: 3px; margin-right: 1px; }
+.cl.long.cont { height: 5px; padding: 0; }
+.lg { display: inline-block; width: 14px; height: 10px; border-radius: 3px; }
+.lg.ev { background: var(--ev-soft); border: 1.5px solid var(--ev); }
+.lg.task { background: var(--primary-soft); border: 1.5px solid var(--primary); }
+.lg.over { background: var(--danger-soft); border: 1.5px solid var(--danger); }
+.lg.long { background: var(--primary); }
