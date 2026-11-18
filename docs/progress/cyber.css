@@ -238,3 +238,5 @@
 :root[data-look="cyber"] .section-title, :root[data-look="cyber"] .dt-head { justify-content: flex-start; gap: 4px; }
 :root[data-look="cyber"] .section-title > small, :root[data-look="cyber"] .dt-head > small,
 :root[data-look="cyber"] .section-title > .text-btn { margin-left: auto; }
+:root[data-look="cyber"] .cl.evspan { color: #05060d; background: var(--ev); box-shadow: 0 0 8px var(--ev); }
+:root[data-look="cyber"] .cl.rt { background: transparent; color: var(--rt); }
