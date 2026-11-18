@@ -45,7 +45,7 @@
     const cutoff = ymd(addDays(new Date(), -60));
     const plans = {};
     Object.entries(d.plans || {}).forEach(([k, v]) => { if (k >= cutoff && v.length) plans[k] = v; });
-    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "kotan", ...(d.settings || {}) };
+    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "kotan", calRoutines: true, ...(d.settings || {}) };
     return { tasks, routines, events, plans, settings };
   }
   function save() {
@@ -124,7 +124,20 @@
   }
 
   /* ---------- ルーティン ---------- */
-  const isScheduled = (r, d) => r.days.includes(d.getDay());
+  // その日にルーティンがあるか（曜日・開始日〜終了日・お休みにした日を見る）
+  function inRoutineRange(r, ds) {
+    if (r.startDate && ds < r.startDate) return false;
+    if (r.endDate && ds > r.endDate) return false;
+    return true;
+  }
+  const isSkipped = (r, ds) => (r.skipDates || []).includes(ds);
+  const isScheduled = (r, d) => {
+    if (!r.days.includes(d.getDay())) return false;
+    const ds = ymd(d);
+    return inRoutineRange(r, ds) && !isSkipped(r, ds);
+  };
+  // 本来はある日だけど、お休みにした日
+  const isOffDay = (r, d) => r.days.includes(d.getDay()) && inRoutineRange(r, ymd(d)) && isSkipped(r, ymd(d));
   const isDoneOn = (r, ds) => (r.doneDates || []).includes(ds);
   const timeRange = (r) => `${r.time}〜${r.end}`;
   function durationLabel(r) {
@@ -154,7 +167,7 @@
   }
   function nextOccurrence(r, from = new Date()) {
     const [H, M] = r.time.split(":").map(Number);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 400; i++) {
       const d = addDays(from, i);
       d.setHours(H, M, 0, 0);
       if (isScheduled(r, d) && d >= from) return d;
@@ -208,14 +221,25 @@
     return lines;
   }
   function routineEvent(r) {
-    const start = nextOccurrence(r, startOfDay(new Date()));
+    let from = startOfDay(new Date());
+    if (r.startDate && parseDay(r.startDate) > from) from = parseDay(r.startDate);
+    // 開始日以降の最初の回（お休みの日は飛ばさずに、くり返しの起点にする）
+    const [H, M] = r.time.split(":").map(Number);
+    let start = null;
+    for (let i = 0; i < 8; i++) {
+      const d = addDays(from, i);
+      if (r.days.includes(d.getDay())) { d.setHours(H, M, 0, 0); start = d; break; }
+    }
+    if (!start || (r.endDate && ymd(start) > r.endDate)) return [];
     let mins = toMin(r.end) - toMin(r.time);
     if (mins <= 0) mins += 1440;
     const end = new Date(start.getTime() + mins * 60000);
-    const rrule = r.days.length === 7 ? "RRULE:FREQ=DAILY"
-      : `RRULE:FREQ=WEEKLY;BYDAY=${r.days.map((d) => ICS_DAY[d]).join(",")}`;
+    const until = r.endDate ? `;UNTIL=${icsUtc(new Date(`${r.endDate}T23:59`))}` : "";
+    const rrule = r.days.length === 7 ? `RRULE:FREQ=DAILY${until}`
+      : `RRULE:FREQ=WEEKLY;BYDAY=${r.days.map((d) => ICS_DAY[d]).join(",")}${until}`;
+    const ex = (r.skipDates || []).filter((x) => x >= ymd(start)).map((x) => dt("EXDATE", new Date(`${x}T${r.time}`)));
     return ["BEGIN:VEVENT", `UID:routine-${r.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`,
-      dt("DTSTART", start), dt("DTEND", end), rrule,
+      dt("DTSTART", start), dt("DTEND", end), rrule, ...ex,
       `SUMMARY:${icsEsc("🔁 " + r.title)}`, ...alarm(`ルーティンの時間です：${r.title}（〜${r.end}）`, 0), "END:VEVENT"];
   }
   function buildIcs(eventLines) {
@@ -284,16 +308,28 @@
       <div class="body"><div class="title">${esc(t.title)}</div><div class="meta">${meta}</div>${t.done ? "" : progressBar(t)}${next}</div></div>`;
   }
 
-  function routineCard(r, ds, checkable) {
+  function rangeLabel(r) {
+    const f = (x) => mdw(parseDay(x));
+    if (r.startDate && r.endDate) return `${f(r.startDate)}〜${f(r.endDate)}`;
+    if (r.startDate && r.startDate > todayStr()) return `${f(r.startDate)}から`;
+    if (r.endDate) return `〜${f(r.endDate)}`;
+    return "";
+  }
+  function routineCard(r, ds, checkable, off) {
+    if (off) {
+      return `<div class="card done off" data-routine="${r.id}" data-ctx="${ds}"><div class="check ghost" aria-hidden="true"></div>
+        <div class="body"><div class="title">${esc(r.title)}</div><div class="meta"><span>⏰ ${timeRange(r)}</span><span class="badge">💤 この日はお休み</span></div></div></div>`;
+    }
     const done = isDoneOn(r, ds);
     const s = streak(r);
-    const meta = `<span>⏰ ${timeRange(r)}</span><span>${daysLabel(r.days)}</span>` +
+    const rl = rangeLabel(r);
+    const meta = `<span>⏰ ${timeRange(r)}</span><span>${daysLabel(r.days)}</span>` + (rl ? `<span>📆 ${rl}</span>` : "") +
       (s > 0 ? `<span class="badge ok">🔥 ${s}回連続</span>` : "") +
       (r.calAdded ? `<span class="badge bell">🔔通知</span>` : "");
     const check = checkable
       ? `<button class="check ${done ? "on" : ""}" data-toggle-routine="${r.id}" data-date="${ds}" aria-label="やった">${CHECK_SVG}</button>`
       : `<div class="check ghost" aria-hidden="true"></div>`;
-    return `<div class="card ${checkable && done ? "done" : ""}" data-routine="${r.id}">${check}
+    return `<div class="card ${checkable && done ? "done" : ""}" data-routine="${r.id}" data-ctx="${ds}">${check}
       <div class="body"><div class="title">${esc(r.title)}</div><div class="meta">${meta}</div></div></div>`;
   }
 
@@ -421,7 +457,16 @@
         const en = t.due.slice(0, 10) === ds || d.getDay() === 6;
         return `<i class="cl long ${st ? "s" : "cont"} ${en ? "e" : ""} ${t.done ? "done" : ""}" style="--c:${longColor(t)}">${st ? esc(t.title) : ""}</i>`;
       }).join("");
-      const evs = eventsOn(ds).map((ev) => `<i class="cl ev">${esc(ev.title)}</i>`).join("");
+      const evs = eventsOn(ds).map((ev) => {
+        const g = evSeg(ev, ds);
+        if (!g.multi) return `<i class="cl ev">${esc(ev.title)}</i>`;
+        const st = g.first || d.getDay() === 0 || ds === ymd(gridStart);
+        const en = g.last || d.getDay() === 6;
+        return `<i class="cl evspan ${st ? "s" : "cont"} ${en ? "e" : ""}">${st ? esc(ev.title) : ""}</i>`;
+      }).join("");
+      const rts = state.settings.calRoutines
+        ? state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time))
+          .map((r) => `<i class="cl rt ${isDoneOn(r, ds) ? "done" : ""}">${esc(r.title)}</i>`).join("") : "";
       const dues = state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds)
         .sort((x, y) => x.due.localeCompare(y.due))
         .map((t) => `<i class="cl task ${t.done ? "done" : parseLocal(t.due) < now ? "over" : ""}">${esc(t.title)}</i>`).join("");
@@ -431,7 +476,7 @@
         d.getDay() === 0 ? "sun" : d.getDay() === 6 ? "sat" : ""].join(" ");
       cells += `<button class="cal-cell ${cls}" data-day="${ds}">
         <span class="num">${d.getDate()}${allDone ? '<em class="rdone">✓</em>' : ""}</span>
-        <span class="items">${bars}${evs}${dues}</span></button>`;
+        <span class="items">${bars}${evs}${dues}${rts}</span></button>`;
     }
 
     main.innerHTML = `
@@ -443,7 +488,11 @@
         </div>
         <div class="cal-grid wd">${WD.map((w, i) => `<span class="${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${w}</span>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
-        <div class="cal-legend"><span><i class="lg ev"></i>予定</span><span><i class="lg task"></i>タスクの期限</span><span><i class="lg over"></i>期限切れ</span><span><i class="lg long"></i>長期タスクの期間</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
+        <div class="cal-legend"><span><i class="lg ev"></i>予定</span><span><i class="lg task"></i>タスクの期限</span><span><i class="lg over"></i>期限切れ</span><span><i class="lg long"></i>長期タスクの期間</span><span><i class="lg rt"></i>ルーティン</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
+        <div class="cal-tools">
+          <button class="chip ${state.settings.calRoutines ? "on" : ""}" data-cal-rt>🔁 ルーティンを表示</button>
+          <button class="chip" data-cal-export>🖼 画像で保存</button>
+        </div>
         ${calMonth.getTime() !== firstOfMonth(now).getTime() ? `<button class="text-btn" data-cal-today style="justify-self:center">今日に戻る</button>` : ""}
       </section>
       ${dayAgenda(calSelected)}`;
@@ -453,6 +502,7 @@
     const d = parseDay(ds);
     const ts = todayStr();
     const routines = state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time));
+    const offs = state.routines.filter((r) => isOffDay(r, d));
     const dues = state.tasks.filter((t) => t.due && t.due.slice(0, 10) === ds).sort((a, b) => a.due.localeCompare(b.due));
     const ongoing = state.tasks.filter((t) => longCovers(t, ds) && !dues.includes(t));
     const evs = eventsOn(ds);
@@ -465,10 +515,126 @@
         <button class="chip on" data-open-schedule="${ds}">🗓 スケジュール表${planN ? `（Todo ${planN}）` : ""}</button>
       </div>
       ${empty ? `<div class="empty">${say("予定はありません", "よていないよー")}</div>` : ""}
-      ${evs.length ? `<div class="sub-title">予定</div><div class="list">${evs.map((ev) => eventCard(ev)).join("")}</div>` : ""}
-      ${routines.length ? `<div class="sub-title">ルーティン</div><div class="list">${routines.map((r) => routineCard(r, ds, ds <= ts)).join("")}</div>` : ""}
+      ${evs.length ? `<div class="sub-title">予定</div><div class="list">${evs.map((ev) => eventCard(ev, ds)).join("")}</div>` : ""}
+      ${routines.length || offs.length ? `<div class="sub-title">ルーティン</div><div class="list">${routines.map((r) => routineCard(r, ds, ds <= ts)).join("")}${offs.map((r) => routineCard(r, ds, false, true)).join("")}</div>` : ""}
       ${dues.length ? `<div class="sub-title">この日が期限</div><div class="list">${dues.map(taskCard).join("")}</div>` : ""}
       ${ongoing.length ? `<div class="sub-title">期間中の長期タスク</div><div class="list">${ongoing.map(taskCard).join("")}</div>` : ""}`;
+  }
+
+  /* ---------- カレンダーを画像で書き出す ---------- */
+  async function exportCalendarImage() {
+    toast("画像を作っています…");
+    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { /* noop */ }
+    const y = calMonth.getFullYear(), m = calMonth.getMonth();
+    const first = new Date(y, m, 1);
+    const gridStart = addDays(first, -first.getDay());
+    const weeks = Math.ceil((first.getDay() + new Date(y, m + 1, 0).getDate()) / 7);
+    const ts = todayStr(), now = new Date();
+    const cs = getComputedStyle(document.documentElement);
+    const v = (n, fb) => (cs.getPropertyValue(n) || "").trim() || fb;
+    const C = {
+      bg: getComputedStyle(document.body).backgroundColor || "#fff", surface: v("--surface", "#fff"), text: v("--text", "#222"),
+      muted: v("--muted", "#888"), line: v("--line", "#ddd"), primary: v("--primary", "#4f6bed"), ev: v("--ev", "#0ea5c6"),
+      rt: v("--rt", "#22a06b"), danger: v("--danger", "#e8483a"), sun: v("--danger", "#e8483a"), sat: v("--primary", "#4f6bed"),
+    };
+    const font = getComputedStyle(document.body).fontFamily;
+    const W = 1170, PAD = 36, HEAD = 150, WDH = 52, LINE = 34, NUMH = 46, MAXI = 7;
+    const cellW = (W - PAD * 2) / 7;
+
+    // 1日ぶんの中身（画面と同じ並び：長期タスク → 予定 → タスク → ルーティン）
+    const longs = state.tasks.filter((t) => isLong(t) && t.due);
+    const dayData = [];
+    for (let i = 0; i < weeks * 7; i++) {
+      const d = addDays(gridStart, i), ds = ymd(d);
+      const items = [];
+      longs.filter((t) => longCovers(t, ds)).forEach((t) => items.push({ text: t.title, color: longColor(t), solid: true, done: t.done }));
+      eventsOn(ds).forEach((ev) => { const g = evSeg(ev, ds); items.push({ text: (g.allDay || g.multi ? "" : g.start + " ") + ev.title, color: C.ev, solid: g.multi }); });
+      state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds).sort((a, b) => a.due.localeCompare(b.due))
+        .forEach((t) => items.push({ text: "〆" + t.title, color: !t.done && parseLocal(t.due) < now ? C.danger : C.primary, done: t.done }));
+      if (state.settings.calRoutines) state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time))
+        .forEach((r) => items.push({ text: "🔁" + r.title, color: C.rt, done: isDoneOn(r, ds) }));
+      dayData.push({ d, ds, items });
+    }
+    const rowH = [];
+    for (let w = 0; w < weeks; w++) {
+      const n = Math.max(...dayData.slice(w * 7, w * 7 + 7).map((x) => Math.min(x.items.length, MAXI + 1)));
+      rowH.push(Math.max(150, NUMH + n * LINE + 14));
+    }
+    const H = HEAD + WDH + rowH.reduce((a, b) => a + b, 0) + PAD * 2 + 40;
+    const cv = document.createElement("canvas");
+    cv.width = W; cv.height = H;
+    const g = cv.getContext("2d");
+    const rr = (x, yy, w, h, r) => { g.beginPath(); g.moveTo(x + r, yy); g.arcTo(x + w, yy, x + w, yy + h, r); g.arcTo(x + w, yy + h, x, yy + h, r); g.arcTo(x, yy + h, x, yy, r); g.arcTo(x, yy, x + w, yy, r); g.closePath(); };
+    const fit = (t, w) => { if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + "…").width > w) t = t.slice(0, -1); return t + "…"; };
+
+    g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
+    g.fillStyle = C.surface; rr(PAD / 2, PAD / 2, W - PAD, H - PAD, 36); g.fill();
+    g.fillStyle = C.text; g.textBaseline = "middle";
+    g.font = `800 56px ${font}`; g.fillText(`${y}年${m + 1}月`, PAD + 10, PAD + 58);
+    g.font = `500 22px ${font}`; g.fillStyle = C.muted;
+    g.textAlign = "right"; g.fillText("しんちょくノート", W - PAD - 10, PAD + 62); g.textAlign = "left";
+    let top = HEAD;
+    WD.forEach((w, i) => {
+      g.font = `700 24px ${font}`; g.fillStyle = i === 0 ? C.sun : i === 6 ? C.sat : C.muted; g.textAlign = "center";
+      g.fillText(w, PAD + cellW * i + cellW / 2, top + WDH / 2);
+    });
+    g.textAlign = "left";
+    top += WDH;
+    for (let w = 0; w < weeks; w++) {
+      g.strokeStyle = C.line; g.lineWidth = 2; g.beginPath(); g.moveTo(PAD, top); g.lineTo(W - PAD, top); g.stroke();
+      for (let c = 0; c < 7; c++) {
+        const { d, ds, items } = dayData[w * 7 + c];
+        const x = PAD + cellW * c, out = d.getMonth() !== m;
+        g.globalAlpha = out ? 0.35 : 1;
+        // 日付
+        g.font = `700 26px ${font}`; g.textAlign = "center";
+        if (ds === ts) { g.fillStyle = C.primary; g.beginPath(); g.arc(x + cellW / 2, top + 24, 19, 0, Math.PI * 2); g.fill(); g.fillStyle = "#fff"; }
+        else g.fillStyle = c === 0 ? C.sun : c === 6 ? C.sat : C.text;
+        g.fillText(String(d.getDate()), x + cellW / 2, top + 25);
+        g.textAlign = "left";
+        // 中身
+        g.font = `600 19px ${font}`;
+        const shown = items.length > MAXI + 1 ? items.slice(0, MAXI) : items;
+        shown.forEach((it, k) => {
+          const iy = top + NUMH + k * LINE, ix = x + 4, iw = cellW - 8;
+          g.globalAlpha = (out ? 0.35 : 1) * (it.done ? 0.45 : 1);
+          if (it.solid) { g.fillStyle = it.color; rr(ix, iy, iw, LINE - 5, 6); g.fill(); g.fillStyle = "#fff"; }
+          else {
+            g.save(); g.globalAlpha *= 0.16; g.fillStyle = it.color; rr(ix, iy, iw, LINE - 5, 6); g.fill(); g.restore();
+            g.fillStyle = it.color;
+          }
+          g.fillText(fit(it.text, iw - 10), ix + 5, iy + (LINE - 5) / 2 + 1);
+        });
+        if (items.length > shown.length) {
+          g.fillStyle = C.muted; g.fillText(`ほか${items.length - shown.length}件`, x + 8, top + NUMH + shown.length * LINE + 14);
+        }
+        g.globalAlpha = 1;
+      }
+      top += rowH[w];
+    }
+    g.font = `500 20px ${font}`; g.fillStyle = C.muted;
+    g.fillText(`${now.getMonth() + 1}/${now.getDate()} ${hm(now)} 時点`, PAD + 10, H - PAD - 4);
+
+    const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+    if (!blob) { toast("画像を作れませんでした"); return; }
+    const url = URL.createObjectURL(blob);
+    const file = new File([blob], `calendar-${y}-${pad(m + 1)}.png`, { type: "image/png" });
+    openSheet(`
+      <h2>🖼 カレンダーの画像</h2>
+      <img src="${url}" alt="${y}年${m + 1}月のカレンダー" class="cal-export">
+      <p class="note">「保存・共有」から「画像を保存」を選ぶと写真に入ります。画像を長押ししても保存できます。</p>
+      <div class="actions"><button type="button" class="btn" id="cx-close">閉じる</button>
+        <button type="button" class="btn primary" id="cx-share">保存・共有</button></div>`,
+    (f) => {
+      f.onsubmit = (e) => e.preventDefault();
+      $("#cx-close", f).onclick = () => { closeSheet(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+      $("#cx-share", f).onclick = async () => {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: `${y}年${m + 1}月のカレンダー` }); return; } catch (e) { if (e.name === "AbortError") return; }
+        }
+        const a = document.createElement("a"); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+      };
+    });
   }
 
   /* ---------- 編集シート ---------- */
@@ -620,9 +786,11 @@
     });
   }
 
-  function routineSheet(r) {
+  function routineSheet(r, ctxDate) {
     const isNew = !r;
-    r = r || { id: uid(), title: "", time: "07:00", end: "07:30", days: [0, 1, 2, 3, 4, 5, 6], doneDates: [], calAdded: false };
+    r = r || { id: uid(), title: "", time: "07:00", end: "07:30", days: [0, 1, 2, 3, 4, 5, 6], doneDates: [], calAdded: false,
+      startDate: ctxDate && ctxDate > todayStr() ? ctxDate : todayStr(), endDate: "", skipDates: [] };
+    if (!r.skipDates) r.skipDates = [];
     let days = [...r.days];
     const order = [1, 2, 3, 4, 5, 6, 0];
     openSheet(`
@@ -638,6 +806,12 @@
       <div class="field"><span class="label">くり返す曜日</span>
         <div class="days">${order.map((d) => `<button type="button" class="day ${d === 0 ? "sun" : d === 6 ? "sat" : ""}" data-d="${d}">${WD[d]}</button>`).join("")}</div>
         <div class="quick"><button type="button" class="chip" data-p="all">毎日</button><button type="button" class="chip" data-p="wd">平日</button><button type="button" class="chip" data-p="we">週末</button></div></div>
+      <div class="field"><span class="label">期間</span>
+        <div class="row2 time-range"><label class="mini">開始日<input type="date" id="r-sdate" value="${r.startDate || ""}"></label>
+          <label class="mini">終了日（なくてもOK）<input type="date" id="r-edate" value="${r.endDate || ""}"></label></div>
+        <div class="quick"><button type="button" class="chip" data-rd="today">今日から</button><button type="button" class="chip" data-rd="tomorrow">明日から</button>
+          <button type="button" class="chip" data-rd="noend">終了日なし</button></div></div>
+      ${isNew ? "" : `<div class="field"><span class="label">お休みの日</span><div id="r-skip"></div></div>`}
       <div class="actions">
         ${isNew ? "" : `<button type="button" class="btn danger" id="r-del">削除</button>`}
         <button type="button" class="btn" id="r-cancel">キャンセル</button>
@@ -668,6 +842,36 @@
       f.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => {
         days = { all: [0, 1, 2, 3, 4, 5, 6], wd: [1, 2, 3, 4, 5], we: [0, 6] }[b.dataset.p]; paint();
       });
+      const sdI = $("#r-sdate", f), edI = $("#r-edate", f);
+      f.querySelectorAll("[data-rd]").forEach((b) => b.onclick = () => {
+        const k = b.dataset.rd;
+        if (k === "today") sdI.value = todayStr();
+        else if (k === "tomorrow") sdI.value = ymd(addDays(new Date(), 1));
+        else edI.value = "";
+      });
+      // この日だけお休み（今すぐ反映する）
+      const paintSkip = () => {
+        const box = $("#r-skip", f);
+        if (!box) return;
+        const cd = ctxDate && parseDay(ctxDate);
+        const canCtx = cd && r.days.includes(cd.getDay()) && inRoutineRange(r, ctxDate);
+        const list = (r.skipDates || []).filter((x) => x >= todayStr()).sort();
+        box.innerHTML = (canCtx
+          ? `<button type="button" class="btn wide" data-skip-ctx>${isSkipped(r, ctxDate) ? `↩︎ ${mdw(cd)} のお休みをやめる` : `💤 ${mdw(cd)} だけお休みにする`}</button>` : "")
+          + (list.length ? `<div class="quick skip-list">${list.map((x) => `<button type="button" class="chip" data-unskip="${x}">${mdw(parseDay(x))} ✕</button>`).join("")}</div>`
+            : `<p class="note">お休みにした日はありません。カレンダーやスケジュールでその日のルーティンを開くと、その日だけお休みにできます</p>`);
+        const sc = box.querySelector("[data-skip-ctx]");
+        if (sc) sc.onclick = () => {
+          r.skipDates = isSkipped(r, ctxDate) ? r.skipDates.filter((x) => x !== ctxDate) : [...r.skipDates, ctxDate].sort();
+          save(); render(); paintSkip();
+          toast(isSkipped(r, ctxDate) ? say(`${mdw(cd)} はお休みにしました`, "そのひはおやすみー") : "お休みをやめました");
+          if (r.calAdded && isSkipped(r, ctxDate)) setTimeout(() => toast("iPhoneのカレンダーに入れている場合は、その日の予定をカレンダーから消してください"), 2300);
+        };
+        box.querySelectorAll("[data-unskip]").forEach((b) => b.onclick = () => {
+          r.skipDates = r.skipDates.filter((x) => x !== b.dataset.unskip); save(); render(); paintSkip();
+        });
+      };
+      paintSkip();
       $("#r-cancel", f).onclick = closeSheet;
       if (!isNew) $("#r-del", f).onclick = () => {
         if (!confirm(`「${r.title}」を削除しますか？` + (r.calAdded ? "\n※カレンダーの予定（くり返し）は、カレンダーアプリで「今後のすべてのイベントを削除」してください。" : ""))) return;
@@ -681,12 +885,15 @@
         const time = tI.value || "07:00";
         const end = eI.value || addMinutes(time, 30);
         if (end === time) { toast("終了時刻を開始時刻と別にしてください"); return; }
-        const changed = title !== r.title || time !== r.time || end !== r.end || [...days].sort().join() !== [...r.days].sort().join();
-        Object.assign(r, { title, time, end, days: days.sort() });
+        const startDate = sdI.value || "", endDate = edI.value || "";
+        if (startDate && endDate && endDate < startDate) { toast("終了日が開始日より前になっています"); return; }
+        const changed = title !== r.title || time !== r.time || end !== r.end || [...days].sort().join() !== [...r.days].sort().join()
+          || startDate !== (r.startDate || "") || endDate !== (r.endDate || "");
+        Object.assign(r, { title, time, end, days: days.sort(), startDate, endDate });
         if (changed && !isNew) r.calAdded = false;
         if (isNew) state.routines.push(r);
         save(); render();
-        if (!r.calAdded) {
+        if (!r.calAdded && routineEvent(r).length) {
           calPrompt(() => {
             openIcs(buildIcs(routineEvent(r)), `routine-${r.id}.ics`);
             r.calAdded = true; save(); render();
@@ -712,7 +919,7 @@
 
   function menuSheet() {
     const pendingTasks = state.tasks.filter((t) => !t.done && t.due && t.remind >= 0 && !t.calAdded && parseLocal(t.due) > new Date());
-    const pendingRoutines = state.routines.filter((r) => !r.calAdded);
+    const pendingRoutines = state.routines.filter((r) => !r.calAdded && routineEvent(r).length);
     const pendingEvents = state.events.filter((ev) => !ev.calAdded && ev.remind >= 0 && (ev.repeat === "weekly" || ev.date >= todayStr()));
     const n = pendingTasks.length + pendingRoutines.length + pendingEvents.length;
     openSheet(`
@@ -858,27 +1065,62 @@
   const fmtMin = (m) => { m = Math.min(Math.max(m, 0), 1439); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
   const icsDate = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
   const endMin = (start, end) => (toMin(end) > toMin(start) ? toMin(end) : 1440);
-  function eventOn(ev, ds) {
-    if (ev.repeat === "weekly") return ds >= ev.date && parseDay(ds).getDay() === parseDay(ev.date).getDay();
-    return ev.date === ds;
+  const daysBetween = (a, b) => Math.round((parseDay(b) - parseDay(a)) / 86400000);
+  // 予定が何日ぶんか（0 = その日だけ）。毎週の予定は最大6日まで
+  const evSpan = (ev) => {
+    const n = Math.max(0, daysBetween(ev.date, ev.endDate || ev.date));
+    return ev.repeat === "weekly" ? Math.min(n, 6) : n;
+  };
+  // ds が予定の何日目か（予定がなければ -1）
+  function evOffset(ev, ds) {
+    const k = daysBetween(ev.date, ds);
+    if (k < 0) return -1;
+    const off = ev.repeat === "weekly" ? k % 7 : k;
+    return off <= evSpan(ev) ? off : -1;
   }
+  const eventOn = (ev, ds) => evOffset(ev, ds) >= 0;
+  // その日の中での予定の時間（日をまたぐ予定は、初日は開始〜24時、最終日は0時〜終了、間の日は終日）
+  function evSeg(ev, ds) {
+    const off = evOffset(ev, ds), span = evSpan(ev);
+    const base = { first: off === 0, last: off === span, multi: span > 0, off };
+    if (ev.allDay) return { ...base, allDay: true };
+    if (!span) return { ...base, allDay: false, start: ev.start, end: ev.end };
+    if (off === 0) return { ...base, allDay: false, start: ev.start, end: "23:59" };
+    if (off === span) return { ...base, allDay: false, start: "00:00", end: ev.end };
+    return { ...base, allDay: true };
+  }
+  function evStartDate(ev, ds) { return ymd(addDays(parseDay(ds), -evOffset(ev, ds))); }
   function eventsOn(ds) {
-    return state.events.filter((ev) => eventOn(ev, ds))
-      .sort((a, b) => (a.allDay ? "" : a.start).localeCompare(b.allDay ? "" : b.start));
+    const key = (ev) => { const g = evSeg(ev, ds); return g.allDay ? "" : g.start; };
+    return state.events.filter((ev) => eventOn(ev, ds)).sort((a, b) => key(a).localeCompare(key(b)));
   }
-  function eventCard(ev) {
-    const meta = (ev.place ? `<span>📍 ${esc(ev.place)}</span>` : "") +
+  function evWhen(ev, ds) {
+    if (!evSpan(ev)) return ev.allDay ? "終日" : `${ev.start}〜${ev.end}`;
+    const s0 = ds ? evStartDate(ev, ds) : ev.date;
+    const e0 = ymd(addDays(parseDay(s0), evSpan(ev)));
+    const f = (x) => mdw(parseDay(x));
+    return ev.allDay ? `${f(s0)}〜${f(e0)} 終日` : `${f(s0)} ${ev.start}〜${f(e0)} ${ev.end}`;
+  }
+  function eventCard(ev, ds) {
+    const multi = evSpan(ev) > 0;
+    const seg = ds ? evSeg(ev, ds) : null;
+    const meta = (multi ? `<span>🗓 ${evWhen(ev, ds)}</span>` : "") + (ev.place ? `<span>📍 ${esc(ev.place)}</span>` : "") +
       (ev.repeat === "weekly" ? `<span class="badge">毎週${WD[parseDay(ev.date).getDay()]}曜</span>` : "") +
       (ev.calAdded ? `<span class="badge bell">🔔通知</span>` : "") + (ev.memo ? `<span>📝 メモあり</span>` : "");
     return `<div class="card evcard" data-event="${ev.id}">
-      <div class="ev-time">${ev.allDay ? "終日" : `${ev.start}<small>${ev.end}</small>`}</div>
+      <div class="ev-time">${seg && seg.allDay || (!seg && ev.allDay) ? (multi ? `${seg ? seg.off + 1 : 1}日目` : "終日")
+        : `${seg ? seg.start : ev.start}<small>${seg ? (seg.end === "23:59" ? "24:00" : seg.end) : ev.end}</small>`}</div>
       <div class="body"><div class="title">${esc(ev.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div></div>`;
   }
   function eventEvent(ev) {
     const lines = ["BEGIN:VEVENT", `UID:event-${ev.id}@shinchoku-note`, `DTSTAMP:${icsUtc(new Date())}`];
     const d = parseDay(ev.date);
-    if (ev.allDay) lines.push(`DTSTART;VALUE=DATE:${icsDate(d)}`, `DTEND;VALUE=DATE:${icsDate(addDays(d, 1))}`);
-    else {
+    const span = evSpan(ev);
+    if (ev.allDay) lines.push(`DTSTART;VALUE=DATE:${icsDate(d)}`, `DTEND;VALUE=DATE:${icsDate(addDays(d, span + 1))}`);
+    else if (span) {
+      const endD = ymd(addDays(d, span));
+      lines.push(dt("DTSTART", new Date(`${ev.date}T${ev.start}`)), dt("DTEND", new Date(`${endD}T${ev.end}`)));
+    } else {
       const s = new Date(`${ev.date}T${ev.start}`);
       const m = endMin(ev.start, ev.end) - toMin(ev.start);
       lines.push(dt("DTSTART", s), dt("DTEND", new Date(s.getTime() + m * 60000)));
@@ -909,15 +1151,20 @@
       const ds = presetDate || todayStr();
       let st = "10:00";
       if (ds === todayStr()) { const n = new Date(); st = fmtMin(Math.min((n.getHours() + 1) * 60, 1380)); }
-      ev = { id: uid(), title: "", date: ds, allDay: false, start: st, end: addMinutes(st, 60), place: "", repeat: "none", remind: 30, memo: "", calAdded: false };
+      ev = { id: uid(), title: "", date: ds, endDate: ds, allDay: false, start: st, end: addMinutes(st, 60), place: "", repeat: "none", remind: 30, memo: "", calAdded: false };
     }
+    if (!ev.endDate) ev.endDate = ev.date;
     const remindOpts = [[-1, "通知しない"], [0, "開始の時刻"], [10, "10分前"], [30, "30分前"], [60, "1時間前"], [1440, "前日"]]
       .map(([v, l]) => `<option value="${v}" ${ev.remind === v ? "selected" : ""}>${l}</option>`).join("");
     openSheet(`
       <h2>${isNew ? "予定を追加" : "予定を編集"}</h2>
       <div class="field"><label for="e-title">予定</label>
         <input type="text" id="e-title" value="${esc(ev.title)}" placeholder="例：歯医者・バイト・授業" autocomplete="off" required></div>
-      <div class="field"><label for="e-date">日付</label><input type="date" id="e-date" value="${ev.date}" required></div>
+      <div class="row2">
+        <div class="field"><label for="e-date">開始日</label><input type="date" id="e-date" value="${ev.date}" required></div>
+        <div class="field"><label for="e-enddate">終了日</label><input type="date" id="e-enddate" value="${ev.endDate}" required></div>
+      </div>
+      <p class="note" id="e-span"></p>
       <label class="switch"><input type="checkbox" id="e-allday" ${ev.allDay ? "checked" : ""}><span>終日</span></label>
       <div class="field" id="e-time-field"><span class="label">時間</span>
         <div class="row2 time-range"><label class="mini">開始<input type="time" id="e-start" value="${ev.start}"></label>
@@ -939,6 +1186,19 @@
       </div>`,
     (f) => {
       const sI = $("#e-start", f), eI = $("#e-end", f), ad = $("#e-allday", f);
+      const dI = $("#e-date", f), edI = $("#e-enddate", f);
+      const showSpan = () => {
+        const n = dI.value && edI.value ? daysBetween(dI.value, edI.value) : 0;
+        $("#e-span", f).textContent = n > 0 ? `${n + 1}日間の予定（日をまたぎます）` : "";
+      };
+      showSpan();
+      // 開始日を動かしたら、日数を保ったまま終了日もずらす
+      let spanDays = Math.max(0, daysBetween(ev.date, ev.endDate));
+      dI.onchange = () => { if (dI.value) edI.value = ymd(addDays(parseDay(dI.value), spanDays)); showSpan(); };
+      edI.onchange = () => {
+        if (edI.value && dI.value && edI.value < dI.value) edI.value = dI.value;
+        spanDays = Math.max(0, daysBetween(dI.value, edI.value)); showSpan();
+      };
       let len = endMin(ev.start, ev.end) - toMin(ev.start);
       const paint = () => { $("#e-time-field", f).hidden = ad.checked; };
       paint();
@@ -955,18 +1215,22 @@
         e.preventDefault();
         const title = $("#e-title", f).value.trim();
         if (!title) { $("#e-title", f).focus(); return; }
-        const date = $("#e-date", f).value || todayStr();
+        const date = dI.value || todayStr();
+        let endDate = edI.value && edI.value >= date ? edI.value : date;
         const start = sI.value || "10:00";
         const end = eI.value || addMinutes(start, 60);
-        if (!ad.checked && end === start) { toast("終了時刻を開始時刻と別にしてください"); return; }
-        const next = { title, date, allDay: ad.checked, start, end, place: $("#e-place", f).value.trim(),
+        // 同じ日で終了が開始より前なら、次の日に終わる予定として扱う
+        if (!ad.checked && endDate === date && toMin(end) < toMin(start)) endDate = ymd(addDays(parseDay(date), 1));
+        if (!ad.checked && endDate === date && end === start) { toast("終了時刻を開始時刻と別にしてください"); return; }
+        if ($("#e-repeat", f).value === "weekly" && daysBetween(date, endDate) > 6) { toast("毎週くり返す予定は7日以内にしてください"); return; }
+        const next = { title, date, endDate, allDay: ad.checked, start, end, place: $("#e-place", f).value.trim(),
           repeat: $("#e-repeat", f).value, remind: Number($("#e-remind", f).value), memo: $("#e-memo", f).value.trim() };
-        const changed = ["title", "date", "allDay", "start", "end", "repeat", "remind"].some((k) => next[k] !== ev[k]);
+        const changed = ["title", "date", "endDate", "allDay", "start", "end", "repeat", "remind"].some((k) => next[k] !== ev[k]);
         Object.assign(ev, next);
         if (changed && !isNew) ev.calAdded = false;
         if (isNew) state.events.push(ev);
         save(); render();
-        if (ev.remind >= 0 && !ev.calAdded && (ev.repeat === "weekly" || ev.date >= todayStr())) {
+        if (ev.remind >= 0 && !ev.calAdded && (ev.repeat === "weekly" || ev.endDate >= todayStr())) {
           calPrompt(() => { openIcs(buildIcs(eventEvent(ev)), `event-${ev.id}.ics`); ev.calAdded = true; save(); render(); }, changed && !isNew);
         } else closeSheet();
       };
@@ -1001,8 +1265,12 @@
   function dayItems(ds) {
     const d = parseDay(ds);
     const items = [];
-    eventsOn(ds).filter((ev) => !ev.allDay).forEach((ev) =>
-      items.push({ kind: "event", id: ev.id, title: ev.title, start: ev.start, end: ev.end, s: toMin(ev.start), e: endMin(ev.start, ev.end), done: false, sub: ev.place }));
+    eventsOn(ds).forEach((ev) => {
+      const g = evSeg(ev, ds);
+      if (g.allDay) return;
+      items.push({ kind: "event", id: ev.id, title: ev.title, start: g.start, end: g.end, s: toMin(g.start), e: endMin(g.start, g.end), done: false,
+        sub: [g.multi ? `${g.off + 1}日目` : "", ev.place].filter(Boolean).join("・") });
+    });
     state.routines.filter((r) => isScheduled(r, d)).forEach((r) =>
       items.push({ kind: "routine", id: r.id, title: r.title, start: r.time, end: r.end, s: toMin(r.time), e: endMin(r.time, r.end), done: isDoneOn(r, ds) }));
     (state.plans[ds] || []).forEach((p) =>
@@ -1279,7 +1547,7 @@
       ? suggestion.blocks.map((b) => ({ kind: "sug", id: b.id, title: b.title, start: b.start, end: b.end, s: toMin(b.start), e: endMin(b.start, b.end), sub: b.reason }))
       : [];
     const all = [...items, ...sug].sort((a, b) => a.s - b.s || b.e - a.e);
-    const allDay = eventsOn(ds).filter((ev) => ev.allDay);
+    const allDay = eventsOn(ds).filter((ev) => evSeg(ev, ds).allDay);
 
     let [from, to] = [toMin(state.settings.wake), toMin(state.settings.sleep)];
     if (to <= from) to = 1440;
@@ -1681,6 +1949,8 @@
     if (f) { taskFilter = f.dataset.filter; render(); return; }
     const mv = e.target.closest("[data-cal-move]");
     if (mv) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + Number(mv.dataset.calMove), 1); render(); fx.slide(Number(mv.dataset.calMove)); return; }
+    if (e.target.closest("[data-cal-rt]")) { state.settings.calRoutines = !state.settings.calRoutines; save(); render(); return; }
+    if (e.target.closest("[data-cal-export]")) { exportCalendarImage(); return; }
     if (e.target.closest("[data-cal-today]")) { calMonth = firstOfMonth(new Date()); calSelected = todayStr(); render(); return; }
     const day = e.target.closest("[data-day]");
     if (day) {
@@ -1759,7 +2029,10 @@
     const tc = e.target.closest("[data-task]");
     if (tc) { taskSheet(state.tasks.find((x) => x.id === tc.dataset.task)); return; }
     const rc = e.target.closest("[data-routine]");
-    if (rc) { routineSheet(state.routines.find((x) => x.id === rc.dataset.routine)); }
+    if (rc) {
+      const ctx = rc.dataset.ctx || (tab === "calendar" ? calSelected : tab === "schedule" ? schedDate : todayStr());
+      routineSheet(state.routines.find((x) => x.id === rc.dataset.routine), ctx);
+    }
   });
 
   // コタンをなでる：画像の上で指（マウス）を行ったり来たり動かす

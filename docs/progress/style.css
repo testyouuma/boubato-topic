@@ -431,3 +431,20 @@ input[type=range] { width: 100%; accent-color: var(--primary); height: 28px; }
 .ro-body small { color: var(--muted); font-size: 12px; }
 .ro-row .icon-btn { flex: none; width: 36px; height: 36px; font-size: 18px; }
 .ro-row .icon-btn:disabled { opacity: .3; }
+
+/* 日をまたぐ予定・ルーティン（カレンダーのマス） */
+.cl.evspan { background: var(--ev); color: #fff; border-radius: 0; margin: 0 -1px; }
+.cl.evspan.s { border-top-left-radius: 3px; border-bottom-left-radius: 3px; margin-left: 1px; }
+.cl.evspan.e { border-top-right-radius: 3px; border-bottom-right-radius: 3px; margin-right: 1px; }
+.cl.evspan.cont { height: 5px; padding: 0; }
+.cl.rt { background: var(--rt-soft, #e1f6ec); color: var(--rt, #1f9d6b); font-weight: 600; }
+.lg.rt { background: var(--rt-soft, #e1f6ec); border: 1.5px solid var(--rt, #1f9d6b); }
+.cal-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding-top: 4px; }
+.cal-tools .chip { font-size: 13px; padding: 5px 12px; }
+.cal-export { width: 100%; border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, .12); }
+.skip-list { margin-top: 8px; }
+.card.off { opacity: .55; }
+/* 日付の入力を横に2つ並べても、はみ出さないように */
+.row2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.row2 > *, .time-range .mini { min-width: 0; }
+.field input[type=date], .field input[type=time] { min-width: 0; max-width: 100%; }
