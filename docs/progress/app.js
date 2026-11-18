@@ -45,8 +45,14 @@
     const cutoff = ymd(addDays(new Date(), -60));
     const plans = {};
     Object.entries(d.plans || {}).forEach(([k, v]) => { if (k >= cutoff && v.length) plans[k] = v; });
-    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "kotan", calRoutines: true, ...(d.settings || {}) };
-    return { tasks, routines, events, plans, settings };
+    const settings = { wake: "07:00", sleep: "23:00", theme: "auto", look: "kotan", calRoutines: true, lastBackup: 0, backupSnooze: 0, ...(d.settings || {}) };
+    if (!settings.firstUse) settings.firstUse = Math.min(Date.now(), ...tasks.map((t) => t.createdAt || Date.now()));
+    const templates = d.templates || [];
+    // コタンの日記は90日ぶんだけ残す
+    const dcut = ymd(addDays(new Date(), -90));
+    const diary = {};
+    Object.entries(d.diary || {}).forEach(([k, v]) => { if (k >= dcut) diary[k] = v; });
+    return { tasks, routines, events, plans, settings, templates, diary };
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -363,10 +369,21 @@
         <small class="go">スケジュールを見る ›</small></button>`
       : `<button class="now-banner" data-goto="schedule"><span>このあとの予定はありません</span><small class="go">💡 Todoを提案してもらう ›</small></button>`;
 
+    const late = open.filter((t) => { const pc = pace(t); return pc && (pc.cls === "danger" || pc.cls === "warn"); });
+    const left = leftovers();
     const hero = isKotan() ? kotanHero(kotanTodayLine({
       overdue, dueToday, pending: todays.filter((r) => !isDoneOn(r, ts)), next, current,
-      open: open.length, total, allDone: total > 0 && got === total,
+      open: open.length, total, allDone: total > 0 && got === total, late,
+      diaryYesterday: !!state.diary[ymd(addDays(now, -1))],
     }, kotanForce)) : "";
+    const lateBox = late.length ? `<button class="notice warn" data-task="${late[0].id}">
+        <b>⚠ ${esc(late[0].title)}${say(" が予定より遅れています", " おくれてるよー")}</b>
+        <small>予定では今ごろ ${pace(late[0]).expected}%・いま ${progressOf(late[0])}%${late.length > 1 ? `（ほか${late.length - 1}件）` : ""}</small></button>` : "";
+    const leftBox = leftoverBox(left);
+    const backupBox = needBackup() ? `<div class="notice">
+        <b>💾 ${say("しばらくバックアップしていません", "バックアップしといたほうがいいよー")}</b>
+        <small>${state.settings.lastBackup ? `前回は${Math.floor((Date.now() - state.settings.lastBackup) / 86400000)}日前` : "まだ一度もバックアップしていません"}。データはこのiPhoneの中だけにあります</small>
+        <div class="notice-actions"><button class="chip" data-backup-later>あとで</button><button class="chip on" data-backup-now>書き出す</button></div></div>` : "";
     kotanForce = false;
     main.innerHTML = `${hero}
       <section class="summary">
@@ -387,7 +404,9 @@
           <div class="stat"><div class="n">${open.length}</div><div class="l">未完了タスク</div></div>
         </div>
         ${nowCard}
+        <button class="text-btn review-link" data-review>📊 ふりかえりを見る</button>
       </section>
+      ${lateBox}${leftBox}${backupBox}
 
       <div class="section-title">今日のルーティン <small>${rDone}/${todays.length}</small></div>
       <div class="list">${todays.length ? todays.map((r) => routineCard(r, ts, true)).join("")
@@ -637,6 +656,212 @@
     });
   }
 
+  /* ---------- 持ち越し：前の日にチェックが付かなかったTodo ---------- */
+  const stripPart = (title) => title.replace(/（\d+\/\d+）$/, "");
+  function leftovers() {
+    const ts = todayStr();
+    const todayKeys = new Set((state.plans[ts] || []).map((q) => `${q.taskId}|${q.stepId || ""}`));
+    const found = new Map();
+    for (let i = 1; i <= 7; i++) {
+      const ds = ymd(addDays(new Date(), -i));
+      (state.plans[ds] || []).forEach((p) => {
+        if (p.done || p.carried || !p.taskId) return;
+        const t = state.tasks.find((x) => x.id === p.taskId);
+        if (!t || t.done) return;
+        if (p.stepId) { const st = t.steps.find((x) => x.id === p.stepId); if (!st || st.done) return; }
+        const key = `${p.taskId}|${p.stepId || ""}`;
+        if (todayKeys.has(key)) return;
+        const dur = endMin(p.start, p.end) - toMin(p.start);
+        if (!found.has(key)) found.set(key, { key, taskId: p.taskId, stepId: p.stepId || "", title: stripPart(p.title), dur: 0, days: new Set(), firstDay: ds });
+        const f = found.get(key);
+        f.days.add(ds);
+        if (ds === f.firstDay) f.dur += dur; // いちばん新しい日のぶんの時間を持ち越す
+      });
+    }
+    return [...found.values()];
+  }
+  function markCarried(key, days) {
+    days.forEach((ds) => (state.plans[ds] || []).forEach((p) => { if (`${p.taskId}|${p.stepId || ""}` === key && !p.done) p.carried = true; }));
+  }
+  function leftoverBox(list) {
+    if (!list.length) return "";
+    return `<div class="notice carry">
+      <b>↪ ${say(`やり残したTodoが${list.length}件あります`, `やりのこし${list.length}こあるよー きょうにもってく`)}</b>
+      <small>${list.slice(0, 3).map((x) => esc(x.title)).join("・")}${list.length > 3 ? " ほか" : ""}</small>
+      <div class="notice-actions"><button class="chip" data-carry-skip>いらない</button><button class="chip on" data-carry>今日に持ち越す</button></div></div>`;
+  }
+  function carryOver() {
+    const ts = todayStr();
+    const list = leftovers();
+    if (!list.length) return;
+    const items = list.map((x) => ({ id: uid(), taskId: x.taskId, stepId: x.stepId, title: x.title, reason: "持ち越し", dur: Math.max(15, x.dur), done: false }));
+    const packed = packInOrder(ts, items).filter((b) => !b.unplaced).map(({ dur, unplaced, ...b }) => b);
+    state.plans[ts] = [...(state.plans[ts] || []), ...packed];
+    list.forEach((x) => markCarried(x.key, x.days));
+    if (suggestion && suggestion.date === ts) suggestion.blocks = suggest(ts, null, suggestion.excluded);
+    save(); render();
+    const lost = items.length - new Set(packed.map((b) => b.taskId + "|" + b.stepId)).size;
+    toast(say(`${packed.length ? "今日のスケジュールに持ち越しました" : "空き時間が足りませんでした"}${lost > 0 && packed.length ? `（${lost}件は入りきりませんでした）` : ""}`,
+      packed.length ? "きょうにいれといたよー" : "あいてるじかんなかったー"));
+  }
+
+  /* ---------- バックアップのお知らせ ---------- */
+  function needBackup() {
+    const has = state.tasks.length + state.routines.length + state.events.length > 0;
+    if (!has || Date.now() < (state.settings.backupSnooze || 0)) return false;
+    const since = state.settings.lastBackup || state.settings.firstUse || Date.now();
+    return Date.now() - since >= 14 * 86400000;
+  }
+  async function exportBackup() {
+    const json = JSON.stringify({ app: "shinchoku-note", version: 3, exportedAt: new Date().toISOString(), ...state }, null, 2);
+    const file = new File([json], `shinchoku-backup-${todayStr()}.json`, { type: "application/json" });
+    const done = () => { state.settings.lastBackup = Date.now(); save(); render(); toast(say("バックアップを書き出しました", "ばっくあっぷしたよー あんしんー")); };
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "しんちょくノート バックアップ" }); done(); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    done();
+  }
+
+  /* ---------- コタンのひとこと日記 ---------- */
+  function dayStats(ds) {
+    const d = parseDay(ds);
+    const tasksDone = state.tasks.filter((t) => t.done && t.doneAt && ymd(new Date(t.doneAt)) === ds).length;
+    const rs = state.routines.filter((r) => isScheduled(r, d));
+    const rDone = rs.filter((r) => isDoneOn(r, ds)).length;
+    const plans = state.plans[ds] || [];
+    return { tasksDone, rTotal: rs.length, rDone, pTotal: plans.length, pDone: plans.filter((p) => p.done).length };
+  }
+  function diaryLine(st) {
+    const c = [];
+    const any = st.tasksDone + st.rDone + st.pDone;
+    if (!any && !st.rTotal && !st.pTotal) c.push("のんびりのひだったねー", "なんにもないひもだいじー");
+    else if (!any) c.push("なんもできなかったー あしたがんばろ", "まあそんなひもあるよー");
+    else {
+      if (st.tasksDone) c.push(`たすく${st.tasksDone}こおわったよー やるねー`, `${st.tasksDone}こもおわらせたじゃん えらい`);
+      if (st.rTotal && st.rDone === st.rTotal) c.push("るーてぃんぜんぶできたー かんぺき", "るーてぃんこんぷりーとー");
+      else if (st.rDone) c.push(`るーてぃん${st.rDone}こできたー`);
+      if (st.pDone) c.push(`とぅーどぅー${st.pDone}こすすめたよー`);
+    }
+    return pick(c);
+  }
+  // 昨日までの日記で、まだ書いていない日を書く（使いはじめる前の日は書かない）
+  function ensureDiary() {
+    const first = ymd(new Date(state.settings.firstUse || Date.now()));
+    let changed = false;
+    for (let i = 1; i <= 7; i++) {
+      const ds = ymd(addDays(new Date(), -i));
+      if (ds < first) break;
+      if (state.diary[ds]) continue;
+      const st = dayStats(ds);
+      state.diary[ds] = { line: diaryLine(st), ...st };
+      changed = true;
+    }
+    if (changed) save();
+  }
+
+  /* ---------- ふりかえり ---------- */
+  function bestStreak(r) {
+    let best = 0, cur = 0;
+    const end = new Date();
+    let d = addDays(end, -365);
+    if (r.startDate && parseDay(r.startDate) > d) d = parseDay(r.startDate);
+    for (; d <= end; d = addDays(d, 1)) {
+      if (!isScheduled(r, d)) continue;
+      if (isDoneOn(r, ymd(d))) { cur++; best = Math.max(best, cur); } else if (ymd(d) !== todayStr()) cur = 0;
+    }
+    return best;
+  }
+  function reviewSheet(range) {
+    const n = range === "month" ? 30 : 7;
+    const days = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = addDays(new Date(), -i), ds = ymd(d);
+      const st = dayStats(ds);
+      days.push({ d, ds, ...st, total: st.tasksDone + st.rDone });
+    }
+    const sum = (k) => days.reduce((a, x) => a + x[k], 0);
+    const tasksDone = sum("tasksDone"), rDone = sum("rDone"), rTotal = sum("rTotal");
+    const rate = rTotal ? Math.round((rDone / rTotal) * 100) : 0;
+    const max = Math.max(1, ...days.map((x) => x.total));
+    const maxIdx = days.findIndex((x) => x.total === max && max > 0);
+    const rStats = state.routines.map((r) => {
+      let tot = 0, dn = 0;
+      days.forEach((x) => { if (isScheduled(r, x.d)) { tot++; if (isDoneOn(r, x.ds)) dn++; } });
+      return { r, tot, dn, best: bestStreak(r) };
+    }).filter((x) => x.tot || x.best);
+    const top = rStats.slice().sort((a, b) => b.best - a.best)[0];
+    const label = range === "month" ? "この30日" : "この1週間";
+    const kline = isKotan() ? (tasksDone + rDone
+      ? pick([`${range === "month" ? "こんげつ" : "こんしゅう"}は${tasksDone + rDone}こできたよー やるねー`, `${tasksDone + rDone}こもがんばったじゃん えらい`])
+      : "これからこれから ぼちぼちいこー") : "";
+    const xl = (x, i) => range === "month" ? (i % 5 === 0 || i === n - 1 ? `${x.d.getMonth() + 1}/${x.d.getDate()}` : "") : WD[x.d.getDay()];
+    const diary = Object.entries(state.diary).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14);
+    const todayLine = diaryLine(dayStats(todayStr()));
+    openSheet(`
+      <h2>📊 ふりかえり</h2>
+      <div class="seg"><button type="button" data-rv="week" class="${range === "week" ? "on" : ""}">1週間</button><button type="button" data-rv="month" class="${range === "month" ? "on" : ""}">1か月</button></div>
+      ${kline ? `<div class="rv-kotan">🐯 ${esc(kline)}</div>` : ""}
+      <div class="stats rv-stats">
+        <div class="stat"><div class="n">${tasksDone}</div><div class="l">タスク完了</div></div>
+        <div class="stat"><div class="n">${rTotal ? rate + "%" : "—"}</div><div class="l">ルーティン達成率</div></div>
+        <div class="stat"><div class="n">${top ? top.best : 0}</div><div class="l">最長の連続記録</div></div>
+      </div>
+      <div class="field"><span class="label">${label}にできたこと（タスク完了＋ルーティン）</span>
+        <div class="rv-chart" role="img" aria-label="${days.map((x) => `${x.d.getMonth() + 1}月${x.d.getDate()}日 ${x.total}件`).join("、")}">
+          ${days.map((x, i) => `<button type="button" class="rv-col ${x.ds === todayStr() ? "today" : ""}" data-tip="${x.d.getMonth() + 1}/${x.d.getDate()}(${WD[x.d.getDay()]})：タスク${x.tasksDone}・ルーティン${x.rDone}">
+            ${i === maxIdx ? `<span class="rv-val">${x.total}</span>` : ""}<i style="height:${(x.total / max) * 100}%"></i><span class="rv-x">${xl(x, i)}</span></button>`).join("")}
+        </div>
+        <p class="note rv-tip" id="rv-tip">棒をタップすると、その日の内訳が出ます</p>
+      </div>
+      ${rStats.length ? `<div class="field"><span class="label">ルーティン</span>
+        <table class="rv-table"><thead><tr><th>ルーティン</th><th>できた</th><th>最長連続</th></tr></thead><tbody>
+        ${rStats.map((x) => `<tr><td>${esc(x.r.title)}</td><td>${x.dn}/${x.tot}（${x.tot ? Math.round((x.dn / x.tot) * 100) : 0}%）</td><td>${x.best}回</td></tr>`).join("")}
+        </tbody></table></div>` : ""}
+      <div class="field"><span class="label">🐯 コタンのひとこと日記</span>
+        <div class="diary">
+          <div class="diary-row today"><span>きょう（いまのところ）</span><b>${esc(todayLine)}</b></div>
+          ${diary.map(([ds, v]) => `<div class="diary-row"><span>${mdw(parseDay(ds))}</span><b>${esc(v.line)}</b></div>`).join("") || `<p class="note">あしたから、その日のことをコタンが書いていきます</p>`}
+        </div></div>
+      <div class="actions"><button type="button" class="btn" id="rv-close">閉じる</button></div>`,
+    (f) => {
+      f.onsubmit = (e) => e.preventDefault();
+      $("#rv-close", f).onclick = closeSheet;
+      f.querySelectorAll("[data-rv]").forEach((b) => b.onclick = () => reviewSheet(b.dataset.rv));
+      f.querySelectorAll(".rv-col").forEach((b) => b.onclick = () => {
+        f.querySelectorAll(".rv-col").forEach((x) => x.classList.toggle("sel", x === b));
+        $("#rv-tip", f).textContent = b.dataset.tip;
+      });
+    });
+  }
+
+  /* ---------- テンプレートの整理 ---------- */
+  function templateSheet() {
+    const paint = (f) => {
+      $("#tp-list", f).innerHTML = state.templates.length ? state.templates.map((tp) => `
+        <div class="ro-row"><div class="ro-body"><b>📋 ${esc(tp.name)}</b><small>${tp.steps.map(esc).join(" → ")}</small></div>
+          <button type="button" class="icon-btn sm" data-tp-del="${tp.id}" aria-label="削除">✕</button></div>`).join("")
+        : `<p class="note">まだテンプレートはありません。長期タスクの編集で、ステップの下の「💾 このステップをテンプレートに保存」から作れます。</p>`;
+    };
+    openSheet(`
+      <h2>📋 テンプレート</h2>
+      <div id="tp-list" class="ro-list"></div>
+      <div class="actions"><button type="button" class="btn" id="tp-close">閉じる</button></div>`,
+    (f) => {
+      f.onsubmit = (e) => e.preventDefault();
+      paint(f);
+      $("#tp-close", f).onclick = closeSheet;
+      $("#tp-list", f).addEventListener("click", (e) => {
+        const b = e.target.closest("[data-tp-del]");
+        if (!b) return;
+        const tp = state.templates.find((x) => x.id === b.dataset.tpDel);
+        if (!tp || !confirm(`テンプレート「${tp.name}」を削除しますか？`)) return;
+        state.templates = state.templates.filter((x) => x.id !== tp.id); save(); paint(f);
+      });
+    });
+  }
+
   /* ---------- 編集シート ---------- */
   const sheet = $("#sheet");
   const form = $("#sheet-form");
@@ -677,9 +902,11 @@
           <button type="button" class="chip" data-q="14">2週間後</button><button type="button" class="chip" data-q="30">1か月後</button>
           <button type="button" class="chip" data-q="90">3か月後</button><button type="button" class="chip" data-q="180">半年後</button>
         </div></div>
+      <div class="field" id="f-tpl-field"><span class="label">📋 テンプレート</span><div class="quick" id="f-tpls"></div></div>
       <div class="field long-only"><span class="label">ステップ（チェックすると進捗が自動で上がります）</span>
         <div id="f-steps" class="steps"></div>
         <div class="step-add"><input type="text" id="f-step-new" placeholder="例：資料を集める" autocomplete="off"><button type="button" class="btn" id="f-step-btn">追加</button></div>
+        <button type="button" class="text-btn" id="f-tpl-save" style="justify-self:start">💾 このステップをテンプレートに保存</button>
       </div>
       <div class="field" id="f-progress-field"><label for="f-progress">進捗 <b id="f-pv">${t.progress}%</b></label>
         <input type="range" id="f-progress" min="0" max="100" step="5" value="${t.progress}"></div>
@@ -721,6 +948,35 @@
         inp.value = ""; paintSteps(); inp.focus();
       };
       $("#f-step-btn", f).onclick = addStep;
+      // テンプレート：押すとステップがまとめて入る（ふつうのタスクなら長期に切り替える）
+      const paintTpls = () => {
+        $("#f-tpls", f).innerHTML = state.templates.length
+          ? state.templates.map((tp) => `<button type="button" class="chip" data-tpl="${tp.id}">📋 ${esc(tp.name)}</button>`).join("")
+          : `<p class="note">よく使うステップの組み合わせを保存しておくと、ここから一発で入れられます（長期タスクのステップの下から保存）</p>`;
+      };
+      paintTpls();
+      $("#f-tpls", f).addEventListener("click", (e) => {
+        const b = e.target.closest("[data-tpl]");
+        if (!b) return;
+        const tp = state.templates.find((x) => x.id === b.dataset.tpl);
+        if (!tp) return;
+        kind = "long";
+        tp.steps.forEach((title) => steps.push({ id: uid(), title, done: false }));
+        if (tp.est && !t.est) $("#f-est", f).value = String(tp.est);
+        paintKind(); paintSteps();
+        toast(say(`「${tp.name}」のステップを入れました`, `${tp.name}のすてっぷいれといたよー`));
+      });
+      $("#f-tpl-save", f).onclick = () => {
+        const list = steps.map((x) => x.title.trim()).filter(Boolean);
+        if (!list.length) { toast("先にステップを入れてください"); return; }
+        const name = (prompt("テンプレートの名前", $("#f-title", f).value.trim() || "") || "").trim();
+        if (!name) return;
+        const ex = state.templates.find((x) => x.name === name);
+        if (ex) { ex.steps = list; ex.est = Number($("#f-est", f).value); }
+        else state.templates.push({ id: uid(), name, steps: list, est: Number($("#f-est", f).value) });
+        save(); paintTpls();
+        toast(say(`テンプレート「${name}」を保存しました`, "てんぷれほぞんしたよー"));
+      };
       $("#f-step-new", f).onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addStep(); } };
       $("#f-steps", f).addEventListener("click", (e) => {
         const tg = e.target.closest("[data-step-toggle]");
@@ -954,6 +1210,8 @@
       <div class="menu-list">
         <button type="button" class="btn cal" id="m-cal" ${n ? "" : "disabled"}>🔔 未登録の通知をまとめてカレンダーに追加（${n}件）</button>
         <button type="button" class="btn" id="m-recal">🔁 カレンダーの通知をすべて登録し直す</button>
+        <button type="button" class="btn" id="m-review">📊 ふりかえり</button>
+        <button type="button" class="btn" id="m-tpl">📋 テンプレートを整理</button>
         <button type="button" class="btn" id="m-export">📤 バックアップを書き出す</button>
         <button type="button" class="btn" id="m-import">📥 バックアップから復元</button>
         <button type="button" class="btn" id="m-clear">🧹 完了したタスクを整理</button>
@@ -1028,15 +1286,9 @@
         [...tasks, ...state.routines, ...events].forEach((x) => (x.calAdded = true));
         save(); closeSheet(); render();
       };
-      $("#m-export", f).onclick = async () => {
-        const json = JSON.stringify({ app: "shinchoku-note", version: 2, exportedAt: new Date().toISOString(), ...state }, null, 2);
-        const file = new File([json], `shinchoku-backup-${todayStr()}.json`, { type: "application/json" });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try { await navigator.share({ files: [file], title: "しんちょくノート バックアップ" }); return; } catch (e) { if (e.name === "AbortError") return; }
-        }
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(file); a.download = file.name; a.click();
-      };
+      $("#m-export", f).onclick = exportBackup;
+      $("#m-review", f).onclick = () => reviewSheet("week");
+      $("#m-tpl", f).onclick = templateSheet;
       $("#m-import", f).onclick = () => $("#m-file", f).click();
       $("#m-file", f).onchange = async (e) => {
         const file = e.target.files[0];
@@ -1615,6 +1867,7 @@
         <button class="icon-btn sm" data-sched-move="1" aria-label="次の日">›</button>
       </div>
       <p class="note sched-note">空き時間 ${durText(free) || "0分"}（${state.settings.wake}〜${state.settings.sleep}で計算）</p>
+      ${ds === ts ? leftoverBox(leftovers()) : ""}
       ${sugBox}
       ${!sug.length && plans.filter((p) => !p.done).length > 1 ? `<button class="btn wide" data-reorder>↕ Todoの順番を並び替える</button>` : ""}
       ${plansNeedCal && !sug.length ? `<button class="btn cal" data-plan-cal>🔔 Todoの時刻に通知する</button>` : ""}
@@ -1642,13 +1895,18 @@
   const KOTAN_MOOD_LINES = {
     sad: ["なんかさみしいー", "かまってー", "しょんぼりー", "きょうはちょっとおちこみぎみー"],
     sleep: ["ねむいー", "ちょっとねていい", "ぐー", "すやー"],
+    happyface: ["ぜんぶおわってごきげんー", "えへへ いいひだねー", "きょうはもうあそんでいいよー"],
   };
-  function pickMood() {
-    const opts = [["normal", 70]];
-    if (kotanImg.sad) opts.push(["sad", 15]);
-    if (kotanImg.sleep) opts.push(["sleep", 15]);
-    let r = Math.random() * opts.reduce((a, [, w]) => a + w, 0);
-    for (const [m, w] of opts) { if ((r -= w) < 0) return m; }
+  // 夜は眠そう、期限切れがあるとしょんぼり、全部終わるとにっこりが出やすい
+  function pickMood(ctx = {}) {
+    const h = new Date().getHours();
+    const w = { normal: 70, sad: kotanImg.sad ? 15 : 0, sleep: kotanImg.sleep ? 15 : 0, happyface: 0 };
+    if (kotanImg.sleep && (h >= 22 || h < 6)) w.sleep = h >= 23 || h < 5 ? 60 : 40;
+    if (kotanImg.sad && ctx.overdue) w.sad = 35;
+    if (kotanImg.happyface && ctx.allDone) { w.happyface = 45; w.sad = 0; }
+    const opts = Object.entries(w).filter(([, v]) => v > 0);
+    let r = Math.random() * opts.reduce((a, [, v]) => a + v, 0);
+    for (const [m, v] of opts) { if ((r -= v) < 0) return m; }
     return "normal";
   }
   function kotanTodayLine(info, force) {
@@ -1665,6 +1923,11 @@
       const x = info.dueToday[0];
       c.push(`今日は${x.title}があるよーん`, `${x.title}今日までだよー がんばろ`, `今日しめきりのやつ${info.dueToday.length}こあるよー`);
     }
+    if (info.late && info.late.length) {
+      const x = info.late[0];
+      c.push(`${x.title}おくれてるかもー がんばろ`, `${x.title}ちょっとペースおちてるよー`);
+    }
+    if (info.diaryYesterday && new Date().getHours() < 12) c.push("きのうのにっき かいといたよー ふりかえりでみてねー");
     if (info.pending.length) {
       const r = info.pending[0];
       c.push(`${r.title}まだやってないよー`, `${r.title}わすれてないー`);
@@ -1679,7 +1942,7 @@
     if (Math.random() < 0.3) c.push(...kotanHello());
     let line = pick(c);
     if (force && c.length > 1) { let n = 0; while (line === kotanCache.line && n++ < 5) line = pick(c); }
-    const mood = pickMood();
+    const mood = pickMood({ overdue: info.overdue.length > 0, allDone: info.allDone });
     // 表情に合わせて、ときどきセリフもその気分に
     if (KOTAN_MOOD_LINES[mood] && Math.random() < 0.5) line = pick(KOTAN_MOOD_LINES[mood]);
     kotanCache = { key, line, mood };
@@ -1967,6 +2230,14 @@
       if (pic) pic.classList.add("hop");
       return;
     }
+    if (e.target.closest("[data-review]")) { reviewSheet("week"); return; }
+    if (e.target.closest("[data-carry]")) { carryOver(); fx.burst(at[0], at[1]); return; }
+    if (e.target.closest("[data-carry-skip]")) {
+      leftovers().forEach(({ key, days }) => markCarried(key, days));
+      save(); render(); toast(say("持ち越さずに片づけました", "きのうのぶんはなしにしたよー")); return;
+    }
+    if (e.target.closest("[data-backup-now]")) { exportBackup(); return; }
+    if (e.target.closest("[data-backup-later]")) { state.settings.backupSnooze = Date.now() + 3 * 86400000; save(); render(); return; }
     const go = e.target.closest("[data-goto]");
     if (go) { if (go.dataset.goto === "schedule") schedDate = todayStr(); goTab(go.dataset.goto); return; }
     const os = e.target.closest("[data-open-schedule]");
@@ -2097,6 +2368,7 @@
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
+  ensureDiary();
   render();
   fx.enter();
   loadKotanImgs().then(() => { if (isKotan() && (kotanImg.normal || kotanImg.happy)) render(); });
