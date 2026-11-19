@@ -52,7 +52,10 @@
     const dcut = ymd(addDays(new Date(), -90));
     const diary = {};
     Object.entries(d.diary || {}).forEach(([k, v]) => { if (k >= dcut) diary[k] = v; });
-    return { tasks, routines, events, plans, settings, templates, diary };
+    const categories = d.categories || [];
+    if (!settings.calCat) settings.calCat = "all";
+    if (!settings.taskCat) settings.taskCat = "all";
+    return { tasks, routines, events, plans, settings, templates, diary, categories };
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -127,6 +130,58 @@
     if (!isLong(t) || !t.due) return false;
     const s = t.start || t.due.slice(0, 10);
     return ds >= s && ds <= t.due.slice(0, 10);
+  }
+
+  /* ---------- 分類（自分で名前を付ける） ---------- */
+  const CAT_COLORS = ["#4f6bed", "#e0772b", "#1f9d6b", "#b04fd6", "#d6384b", "#0f8fb3", "#c9a100", "#7a6a5a"];
+  const catOf = (id) => (id ? state.categories.find((c) => c.id === id) : null);
+  // all = 総合、none = 未分類、それ以外は分類のid
+  function matchCat(item, f) {
+    if (!f || f === "all") return true;
+    if (f === "none") return !catOf(item.cat);
+    return item.cat === f;
+  }
+  const catBadge = (item) => { const c = catOf(item.cat); return c ? `<span class="badge cat" style="--cc:${c.color}">${esc(c.name)}</span>` : ""; };
+  const catStyle = (item) => { const c = catOf(item.cat); return c ? ` style="--cc:${c.color}"` : ""; };
+  function addCategory(name) {
+    name = (name || "").trim();
+    if (!name) return null;
+    const ex = state.categories.find((c) => c.name === name);
+    if (ex) return ex;
+    const c = { id: uid(), name, color: CAT_COLORS[state.categories.length % CAT_COLORS.length] };
+    state.categories.push(c);
+    save();
+    return c;
+  }
+  // 絞り込み中の画面から追加したときは、その分類を最初から選んでおく
+  function presetCat() {
+    const f = tab === "calendar" ? state.settings.calCat : tab === "tasks" ? state.settings.taskCat : "all";
+    return catOf(f) ? f : "";
+  }
+  // 編集画面の「分類」えらび
+  function bindCatPicker(box, get, set) {
+    const paint = () => {
+      const cur = get();
+      box.innerHTML = `<button type="button" class="chip ${!catOf(cur) ? "on" : ""}" data-cat="">なし</button>`
+        + state.categories.map((c) => `<button type="button" class="chip cat-chip ${cur === c.id ? "on" : ""}" style="--cc:${c.color}" data-cat="${c.id}">${esc(c.name)}</button>`).join("")
+        + `<button type="button" class="chip" data-cat-new>＋ 追加</button>`;
+    };
+    paint();
+    box.addEventListener("click", (e) => {
+      if (e.target.closest("[data-cat-new]")) {
+        const c = addCategory(prompt("新しい分類の名前（例：学校・バイト・趣味）") || "");
+        if (c) { set(c.id); paint(); }
+        return;
+      }
+      const b = e.target.closest("[data-cat]");
+      if (b) { set(b.dataset.cat); paint(); }
+    });
+  }
+  // 絞り込みのボタン列（総合・各分類・未分類）
+  function catFilterChips(cur, attr) {
+    if (!state.categories.length) return "";
+    const ch = (k, label, color) => `<button class="chip ${cur === k ? "on" : ""} ${color ? "cat-chip" : ""}" ${color ? `style="--cc:${color}"` : ""} ${attr}="${k}">${label}</button>`;
+    return `<div class="chips cat-filter">${ch("all", "総合")}${state.categories.map((c) => ch(c.id, esc(c.name), c.color)).join("")}${ch("none", "未分類")}</div>`;
   }
 
   /* ---------- ルーティン ---------- */
@@ -303,6 +358,7 @@
     const pc = pace(t);
     if (pc) meta += `<span class="badge ${pc.cls}">${pc.label}</span>`;
     if (long && t.steps.length) meta += `<span>ステップ ${t.steps.filter((s) => s.done).length}/${t.steps.length}</span>`;
+    meta = catBadge(t) + meta;
     if (!t.done && t.calAdded && t.due && t.remind >= 0) meta += `<span class="badge bell">🔔通知</span>`;
     let next = "";
     if (long && !t.done) {
@@ -329,7 +385,7 @@
     const done = isDoneOn(r, ds);
     const s = streak(r);
     const rl = rangeLabel(r);
-    const meta = `<span>⏰ ${timeRange(r)}</span><span>${daysLabel(r.days)}</span>` + (rl ? `<span>📆 ${rl}</span>` : "") +
+    const meta = catBadge(r) + `<span>⏰ ${timeRange(r)}</span><span>${daysLabel(r.days)}</span>` + (rl ? `<span>📆 ${rl}</span>` : "") +
       (s > 0 ? `<span class="badge ok">🔥 ${s}回連続</span>` : "") +
       (r.calAdded ? `<span class="badge bell">🔔通知</span>` : "");
     const check = checkable
@@ -426,7 +482,7 @@
     const avg = all.length ? Math.round(all.reduce((s, t) => s + progressOf(t), 0) / all.length) : 0;
     const longN = all.filter((t) => isLong(t) && !t.done).length;
     let list = all.filter((t) => (taskFilter === "open" ? !t.done : taskFilter === "done" ? t.done
-      : taskFilter === "long" ? isLong(t) && !t.done : true));
+      : taskFilter === "long" ? isLong(t) && !t.done : true) && matchCat(t, state.settings.taskCat));
     list.sort((a, b) => {
       if (a.done !== b.done) return a.done ? 1 : -1;
       if (a.done) return (b.doneAt || 0) - (a.doneAt || 0);
@@ -440,6 +496,7 @@
         <div class="bar ${avg >= 100 ? "full" : ""}" style="height:10px"><i style="width:${avg}%"></i></div>
       </section>
       <div class="section-title" style="margin-top:16px"><div class="chips">${chip("open", `未完了 ${all.length - doneN}`)}${chip("long", `長期 ${longN}`)}${chip("done", `完了 ${doneN}`)}${chip("all", "すべて")}</div></div>
+      ${catFilterChips(state.settings.taskCat, "data-task-cat")}
       <div class="list">${list.length ? list.map(taskCard).join("")
         : `<div class="empty">${taskFilter === "done" ? "完了したタスクはまだありません"
           : taskFilter === "long" ? "長期タスクはありません<br>＋ →「長期」で、開始日〜期限とステップを決めて登録できます"
@@ -464,7 +521,8 @@
     const weeks = Math.ceil((first.getDay() + new Date(y, m + 1, 0).getDate()) / 7);
     const ts = todayStr();
     const now = new Date();
-    const longs = state.tasks.filter((t) => isLong(t) && t.due);
+    const cf = state.settings.calCat;
+    const longs = state.tasks.filter((t) => isLong(t) && t.due && matchCat(t, cf));
 
     let cells = "";
     for (let i = 0; i < weeks * 7; i++) {
@@ -476,19 +534,19 @@
         const en = t.due.slice(0, 10) === ds || d.getDay() === 6;
         return `<i class="cl long ${st ? "s" : "cont"} ${en ? "e" : ""} ${t.done ? "done" : ""}" style="--c:${longColor(t)}">${st ? esc(t.title) : ""}</i>`;
       }).join("");
-      const evs = eventsOn(ds).map((ev) => {
+      const evs = eventsOn(ds).filter((ev) => matchCat(ev, cf)).map((ev) => {
         const g = evSeg(ev, ds);
-        if (!g.multi) return `<i class="cl ev">${esc(ev.title)}</i>`;
+        if (!g.multi) return `<i class="cl ev"${catStyle(ev)}>${esc(ev.title)}</i>`;
         const st = g.first || d.getDay() === 0 || ds === ymd(gridStart);
         const en = g.last || d.getDay() === 6;
         return `<i class="cl evspan ${st ? "s" : "cont"} ${en ? "e" : ""}">${st ? esc(ev.title) : ""}</i>`;
       }).join("");
       const rts = state.settings.calRoutines
-        ? state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time))
-          .map((r) => `<i class="cl rt ${isDoneOn(r, ds) ? "done" : ""}">${esc(r.title)}</i>`).join("") : "";
-      const dues = state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds)
+        ? state.routines.filter((r) => isScheduled(r, d) && matchCat(r, cf)).sort((a, b) => a.time.localeCompare(b.time))
+          .map((r) => `<i class="cl rt ${isDoneOn(r, ds) ? "done" : ""}"${catStyle(r)}>${esc(r.title)}</i>`).join("") : "";
+      const dues = state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds && matchCat(t, cf))
         .sort((x, y) => x.due.localeCompare(y.due))
-        .map((t) => `<i class="cl task ${t.done ? "done" : parseLocal(t.due) < now ? "over" : ""}">${esc(t.title)}</i>`).join("");
+        .map((t) => `<i class="cl task ${t.done ? "done" : parseLocal(t.due) < now ? "over" : ""}"${catStyle(t)}>${esc(t.title)}</i>`).join("");
       const sched = state.routines.filter((r) => isScheduled(r, d));
       const allDone = sched.length && ds <= ts && sched.every((r) => isDoneOn(r, ds));
       const cls = [d.getMonth() !== m ? "out" : "", ds === ts ? "today" : "", ds === calSelected ? "sel" : "",
@@ -505,6 +563,7 @@
           <b>${y}年${m + 1}月</b>
           <button class="icon-btn sm" data-cal-move="1" aria-label="次の月">›</button>
         </div>
+        ${catFilterChips(cf, "data-cal-cat")}
         <div class="cal-grid wd">${WD.map((w, i) => `<span class="${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${w}</span>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
         <div class="cal-legend"><span><i class="lg ev"></i>予定</span><span><i class="lg task"></i>タスクの期限</span><span><i class="lg over"></i>期限切れ</span><span><i class="lg long"></i>長期タスクの期間</span><span><i class="lg rt"></i>ルーティン</span><span><em class="rdone">✓</em>ルーティン全部できた</span></div>
@@ -520,11 +579,12 @@
   function dayAgenda(ds) {
     const d = parseDay(ds);
     const ts = todayStr();
-    const routines = state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time));
-    const offs = state.routines.filter((r) => isOffDay(r, d));
-    const dues = state.tasks.filter((t) => t.due && t.due.slice(0, 10) === ds).sort((a, b) => a.due.localeCompare(b.due));
-    const ongoing = state.tasks.filter((t) => longCovers(t, ds) && !dues.includes(t));
-    const evs = eventsOn(ds);
+    const cf = state.settings.calCat;
+    const routines = state.routines.filter((r) => isScheduled(r, d) && matchCat(r, cf)).sort((a, b) => a.time.localeCompare(b.time));
+    const offs = state.routines.filter((r) => isOffDay(r, d) && matchCat(r, cf));
+    const dues = state.tasks.filter((t) => t.due && t.due.slice(0, 10) === ds && matchCat(t, cf)).sort((a, b) => a.due.localeCompare(b.due));
+    const ongoing = state.tasks.filter((t) => longCovers(t, ds) && !dues.includes(t) && matchCat(t, cf));
+    const evs = eventsOn(ds).filter((ev) => matchCat(ev, cf));
     const planN = (state.plans[ds] || []).length;
     const empty = !routines.length && !dues.length && !ongoing.length && !evs.length;
     return `
@@ -561,16 +621,18 @@
     const cellW = (W - PAD * 2) / 7;
 
     // 1日ぶんの中身（画面と同じ並び：長期タスク → 予定 → タスク → ルーティン）
-    const longs = state.tasks.filter((t) => isLong(t) && t.due);
+    const cf = state.settings.calCat;
+    const cfName = cf === "all" ? "" : cf === "none" ? "未分類" : (catOf(cf) || {}).name || "";
+    const longs = state.tasks.filter((t) => isLong(t) && t.due && matchCat(t, cf));
     const dayData = [];
     for (let i = 0; i < weeks * 7; i++) {
       const d = addDays(gridStart, i), ds = ymd(d);
       const items = [];
       longs.filter((t) => longCovers(t, ds)).forEach((t) => items.push({ text: t.title, color: longColor(t), solid: true, done: t.done }));
-      eventsOn(ds).forEach((ev) => { const g = evSeg(ev, ds); items.push({ text: (g.allDay || g.multi ? "" : g.start + " ") + ev.title, color: C.ev, solid: g.multi }); });
-      state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds).sort((a, b) => a.due.localeCompare(b.due))
+      eventsOn(ds).filter((ev) => matchCat(ev, cf)).forEach((ev) => { const g = evSeg(ev, ds); items.push({ text: (g.allDay || g.multi ? "" : g.start + " ") + ev.title, color: C.ev, solid: g.multi }); });
+      state.tasks.filter((t) => !isLong(t) && t.due && t.due.slice(0, 10) === ds && matchCat(t, cf)).sort((a, b) => a.due.localeCompare(b.due))
         .forEach((t) => items.push({ text: "〆" + t.title, color: !t.done && parseLocal(t.due) < now ? C.danger : C.primary, done: t.done }));
-      if (state.settings.calRoutines) state.routines.filter((r) => isScheduled(r, d)).sort((a, b) => a.time.localeCompare(b.time))
+      if (state.settings.calRoutines) state.routines.filter((r) => isScheduled(r, d) && matchCat(r, cf)).sort((a, b) => a.time.localeCompare(b.time))
         .forEach((r) => items.push({ text: "🔁" + r.title, color: C.rt, done: isDoneOn(r, ds) }));
       dayData.push({ d, ds, items });
     }
@@ -590,6 +652,7 @@
     g.fillStyle = C.surface; rr(PAD / 2, PAD / 2, W - PAD, H - PAD, 36); g.fill();
     g.fillStyle = C.text; g.textBaseline = "middle";
     g.font = `800 56px ${font}`; g.fillText(`${y}年${m + 1}月`, PAD + 10, PAD + 58);
+    if (cfName) { const w0 = g.measureText(`${y}年${m + 1}月`).width; g.font = `700 30px ${font}`; g.fillStyle = C.muted; g.fillText(`・${cfName}`, PAD + 22 + w0, PAD + 62); g.fillStyle = C.text; }
     g.font = `500 22px ${font}`; g.fillStyle = C.muted;
     g.textAlign = "right"; g.fillText("しんちょくノート", W - PAD - 10, PAD + 62); g.textAlign = "left";
     let top = HEAD;
@@ -836,6 +899,52 @@
     });
   }
 
+  /* ---------- 分類の整理 ---------- */
+  function categorySheet() {
+    const count = (id) => [...state.tasks, ...state.events, ...state.routines].filter((x) => x.cat === id).length;
+    const paint = (f) => {
+      $("#cg-list", f).innerHTML = state.categories.length ? state.categories.map((c, i) => `
+        <div class="ro-row"><span class="cat-dot" style="--cc:${c.color}"></span>
+          <div class="ro-body"><b>${esc(c.name)}</b><small>${count(c.id)}件</small></div>
+          <button type="button" class="icon-btn sm" data-cg-color="${c.id}" aria-label="色を変える">🎨</button>
+          <button type="button" class="icon-btn sm" data-cg-ren="${c.id}" aria-label="名前を変える">✎</button>
+          <button type="button" class="icon-btn sm" data-cg-del="${c.id}" aria-label="削除">✕</button></div>`).join("")
+        : `<p class="note">まだ分類はありません。下の「＋ 分類を追加」か、タスク・予定・ルーティンの編集画面から作れます。</p>`;
+    };
+    openSheet(`
+      <h2>🏷 分類</h2>
+      <p class="note">タスク・予定・ルーティンに付けられます。カレンダーやタスク一覧で、分類ごとに表示を切り替えられます。</p>
+      <div id="cg-list" class="ro-list"></div>
+      <button type="button" class="btn wide" id="cg-add">＋ 分類を追加</button>
+      <div class="actions"><button type="button" class="btn" id="cg-close">閉じる</button></div>`,
+    (f) => {
+      f.onsubmit = (e) => e.preventDefault();
+      paint(f);
+      $("#cg-close", f).onclick = () => { closeSheet(); render(); };
+      $("#cg-add", f).onclick = () => { if (addCategory(prompt("新しい分類の名前（例：学校・バイト・趣味）") || "")) { paint(f); render(); } };
+      $("#cg-list", f).addEventListener("click", (e) => {
+        const ren = e.target.closest("[data-cg-ren]"), del = e.target.closest("[data-cg-del]"), col = e.target.closest("[data-cg-color]");
+        const id = (ren || del || col || {}).dataset;
+        if (!id) return;
+        const c = catOf(id.cgRen || id.cgDel || id.cgColor);
+        if (!c) return;
+        if (ren) {
+          const name = (prompt("分類の名前", c.name) || "").trim();
+          if (name && !state.categories.some((x) => x.name === name && x.id !== c.id)) c.name = name;
+        } else if (col) {
+          c.color = CAT_COLORS[(CAT_COLORS.indexOf(c.color) + 1) % CAT_COLORS.length];
+        } else {
+          if (!confirm(`分類「${c.name}」を削除しますか？\n付いていたタスク・予定・ルーティンは「未分類」になります（消えません）`)) return;
+          state.categories = state.categories.filter((x) => x.id !== c.id);
+          [...state.tasks, ...state.events, ...state.routines].forEach((x) => { if (x.cat === c.id) x.cat = ""; });
+          if (state.settings.calCat === c.id) state.settings.calCat = "all";
+          if (state.settings.taskCat === c.id) state.settings.taskCat = "all";
+        }
+        save(); paint(f); render();
+      });
+    });
+  }
+
   /* ---------- テンプレートの整理 ---------- */
   function templateSheet() {
     const paint = (f) => {
@@ -911,6 +1020,7 @@
       <div class="field" id="f-progress-field"><label for="f-progress">進捗 <b id="f-pv">${t.progress}%</b></label>
         <input type="range" id="f-progress" min="0" max="100" step="5" value="${t.progress}"></div>
       <div class="field"><label for="f-est" id="f-est-label">かかる時間の目安（Todo提案で使います）</label><select id="f-est">${[...new Set([...EST_OPTS, t.est || 60])].sort((a, b) => a - b).map((v) => `<option value="${v}" ${(t.est || 60) === v ? "selected" : ""}>${durText(v)}</option>`).join("")}</select></div>
+      <div class="field"><span class="label">🏷 分類</span><div class="quick" id="f-cat"></div></div>
       <div class="field"><label for="f-remind">通知</label><select id="f-remind">${opts}</select></div>
       <div class="field"><label for="f-memo">メモ</label><textarea id="f-memo" placeholder="任意">${esc(t.memo)}</textarea></div>
       <div class="actions">
@@ -948,6 +1058,8 @@
         inp.value = ""; paintSteps(); inp.focus();
       };
       $("#f-step-btn", f).onclick = addStep;
+      let cat = t.cat || (presetCat() || "");
+      bindCatPicker($("#f-cat", f), () => cat, (v) => { cat = v; });
       // テンプレート：押すとステップがまとめて入る（ふつうのタスクなら長期に切り替える）
       const paintTpls = () => {
         $("#f-tpls", f).innerHTML = state.templates.length
@@ -1026,6 +1138,7 @@
           steps: kind === "long" ? steps.filter((s) => s.title.trim()) : [],
           progress: Number($("#f-progress", f).value),
           est: Number($("#f-est", f).value),
+          cat,
         });
         if (progressOf({ ...t, done: false }) >= 100 && !t.done) { t.done = true; t.doneAt = Date.now(); }
         if (changedSchedule && !isNew) t.calAdded = false;
@@ -1062,6 +1175,7 @@
       <div class="field"><span class="label">くり返す曜日</span>
         <div class="days">${order.map((d) => `<button type="button" class="day ${d === 0 ? "sun" : d === 6 ? "sat" : ""}" data-d="${d}">${WD[d]}</button>`).join("")}</div>
         <div class="quick"><button type="button" class="chip" data-p="all">毎日</button><button type="button" class="chip" data-p="wd">平日</button><button type="button" class="chip" data-p="we">週末</button></div></div>
+      <div class="field"><span class="label">🏷 分類</span><div class="quick" id="r-cat"></div></div>
       <div class="field"><span class="label">期間</span>
         <div class="row2 time-range"><label class="mini">開始日<input type="date" id="r-sdate" value="${r.startDate || ""}"></label>
           <label class="mini">終了日（なくてもOK）<input type="date" id="r-edate" value="${r.endDate || ""}"></label></div>
@@ -1099,6 +1213,8 @@
         days = { all: [0, 1, 2, 3, 4, 5, 6], wd: [1, 2, 3, 4, 5], we: [0, 6] }[b.dataset.p]; paint();
       });
       const sdI = $("#r-sdate", f), edI = $("#r-edate", f);
+      let cat = r.cat || (isNew ? presetCat() : "") || "";
+      bindCatPicker($("#r-cat", f), () => cat, (v) => { cat = v; });
       f.querySelectorAll("[data-rd]").forEach((b) => b.onclick = () => {
         const k = b.dataset.rd;
         if (k === "today") sdI.value = todayStr();
@@ -1145,7 +1261,7 @@
         if (startDate && endDate && endDate < startDate) { toast("終了日が開始日より前になっています"); return; }
         const changed = title !== r.title || time !== r.time || end !== r.end || [...days].sort().join() !== [...r.days].sort().join()
           || startDate !== (r.startDate || "") || endDate !== (r.endDate || "");
-        Object.assign(r, { title, time, end, days: days.sort(), startDate, endDate });
+        Object.assign(r, { title, time, end, days: days.sort(), startDate, endDate, cat });
         if (changed && !isNew) r.calAdded = false;
         if (isNew) state.routines.push(r);
         save(); render();
@@ -1212,6 +1328,7 @@
         <button type="button" class="btn" id="m-recal">🔁 カレンダーの通知をすべて登録し直す</button>
         <button type="button" class="btn" id="m-review">📊 ふりかえり</button>
         <button type="button" class="btn" id="m-tpl">📋 テンプレートを整理</button>
+        <button type="button" class="btn" id="m-cat">🏷 分類を整理</button>
         <button type="button" class="btn" id="m-export">📤 バックアップを書き出す</button>
         <button type="button" class="btn" id="m-import">📥 バックアップから復元</button>
         <button type="button" class="btn" id="m-clear">🧹 完了したタスクを整理</button>
@@ -1289,6 +1406,7 @@
       $("#m-export", f).onclick = exportBackup;
       $("#m-review", f).onclick = () => reviewSheet("week");
       $("#m-tpl", f).onclick = templateSheet;
+      $("#m-cat", f).onclick = categorySheet;
       $("#m-import", f).onclick = () => $("#m-file", f).click();
       $("#m-file", f).onchange = async (e) => {
         const file = e.target.files[0];
@@ -1356,7 +1474,7 @@
   function eventCard(ev, ds) {
     const multi = evSpan(ev) > 0;
     const seg = ds ? evSeg(ev, ds) : null;
-    const meta = (multi ? `<span>🗓 ${evWhen(ev, ds)}</span>` : "") + (ev.place ? `<span>📍 ${esc(ev.place)}</span>` : "") +
+    const meta = catBadge(ev) + (multi ? `<span>🗓 ${evWhen(ev, ds)}</span>` : "") + (ev.place ? `<span>📍 ${esc(ev.place)}</span>` : "") +
       (ev.repeat === "weekly" ? `<span class="badge">毎週${WD[parseDay(ev.date).getDay()]}曜</span>` : "") +
       (ev.calAdded ? `<span class="badge bell">🔔通知</span>` : "") + (ev.memo ? `<span>📝 メモあり</span>` : "");
     return `<div class="card evcard" data-event="${ev.id}">
@@ -1423,6 +1541,7 @@
           <label class="mini">終了<input type="time" id="e-end" value="${ev.end}"></label></div>
         <div class="quick"><button type="button" class="chip" data-len="30">30分</button><button type="button" class="chip" data-len="60">1時間</button>
           <button type="button" class="chip" data-len="120">2時間</button><button type="button" class="chip" data-len="240">4時間</button></div></div>
+      <div class="field"><span class="label">🏷 分類</span><div class="quick" id="e-cat"></div></div>
       <div class="field"><label for="e-place">場所</label><input type="text" id="e-place" value="${esc(ev.place)}" placeholder="任意" autocomplete="off"></div>
       <div class="row2">
         <div class="field"><label for="e-repeat">くり返し</label><select id="e-repeat">
@@ -1439,6 +1558,8 @@
     (f) => {
       const sI = $("#e-start", f), eI = $("#e-end", f), ad = $("#e-allday", f);
       const dI = $("#e-date", f), edI = $("#e-enddate", f);
+      let cat = ev.cat || (isNew ? presetCat() : "") || "";
+      bindCatPicker($("#e-cat", f), () => cat, (v) => { cat = v; });
       const showSpan = () => {
         const n = dI.value && edI.value ? daysBetween(dI.value, edI.value) : 0;
         $("#e-span", f).textContent = n > 0 ? `${n + 1}日間の予定（日をまたぎます）` : "";
@@ -1476,7 +1597,7 @@
         if (!ad.checked && endDate === date && end === start) { toast("終了時刻を開始時刻と別にしてください"); return; }
         if ($("#e-repeat", f).value === "weekly" && daysBetween(date, endDate) > 6) { toast("毎週くり返す予定は7日以内にしてください"); return; }
         const next = { title, date, endDate, allDay: ad.checked, start, end, place: $("#e-place", f).value.trim(),
-          repeat: $("#e-repeat", f).value, remind: Number($("#e-remind", f).value), memo: $("#e-memo", f).value.trim() };
+          repeat: $("#e-repeat", f).value, remind: Number($("#e-remind", f).value), memo: $("#e-memo", f).value.trim(), cat };
         const changed = ["title", "date", "endDate", "allDay", "start", "end", "repeat", "remind"].some((k) => next[k] !== ev[k]);
         Object.assign(ev, next);
         if (changed && !isNew) ev.calAdded = false;
@@ -2212,6 +2333,10 @@
     if (f) { taskFilter = f.dataset.filter; render(); return; }
     const mv = e.target.closest("[data-cal-move]");
     if (mv) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + Number(mv.dataset.calMove), 1); render(); fx.slide(Number(mv.dataset.calMove)); return; }
+    const cc = e.target.closest("[data-cal-cat]");
+    if (cc) { state.settings.calCat = cc.dataset.calCat; save(); render(); return; }
+    const tc0 = e.target.closest("[data-task-cat]");
+    if (tc0) { state.settings.taskCat = tc0.dataset.taskCat; save(); render(); return; }
     if (e.target.closest("[data-cal-rt]")) { state.settings.calRoutines = !state.settings.calRoutines; save(); render(); return; }
     if (e.target.closest("[data-cal-export]")) { exportCalendarImage(); return; }
     if (e.target.closest("[data-cal-today]")) { calMonth = firstOfMonth(new Date()); calSelected = todayStr(); render(); return; }
