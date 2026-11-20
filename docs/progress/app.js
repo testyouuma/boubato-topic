@@ -900,15 +900,26 @@
   }
 
   /* ---------- 分類の整理 ---------- */
+  // 色見本（あとは「自由に選ぶ」で好きな色）
+  const CAT_SWATCHES = ["#e8413a", "#ff6fa0", "#ff7a1a", "#ffb02e", "#c9a100", "#9bd36a", "#1f9d6b", "#0fb5a6",
+    "#0f8fb3", "#4f6bed", "#7a5cff", "#b04fd6", "#8b5a3c", "#7a6a5a", "#3a3f4b", "#9aa0b0"];
   function categorySheet() {
     const count = (id) => [...state.tasks, ...state.events, ...state.routines].filter((x) => x.cat === id).length;
+    let openColor = "";
     const paint = (f) => {
-      $("#cg-list", f).innerHTML = state.categories.length ? state.categories.map((c, i) => `
-        <div class="ro-row"><span class="cat-dot" style="--cc:${c.color}"></span>
-          <div class="ro-body"><b>${esc(c.name)}</b><small>${count(c.id)}件</small></div>
-          <button type="button" class="icon-btn sm" data-cg-color="${c.id}" aria-label="色を変える">🎨</button>
-          <button type="button" class="icon-btn sm" data-cg-ren="${c.id}" aria-label="名前を変える">✎</button>
-          <button type="button" class="icon-btn sm" data-cg-del="${c.id}" aria-label="削除">✕</button></div>`).join("")
+      $("#cg-list", f).innerHTML = state.categories.length ? state.categories.map((c) => `
+        <div class="cg-item">
+          <div class="ro-row"><button type="button" class="cat-dot big" style="--cc:${c.color}" data-cg-color="${c.id}" aria-label="色を変える"></button>
+            <div class="ro-body"><b>${esc(c.name)}</b><small>${count(c.id)}件</small></div>
+            <button type="button" class="icon-btn sm" data-cg-color="${c.id}" aria-label="色を変える">🎨</button>
+            <button type="button" class="icon-btn sm" data-cg-ren="${c.id}" aria-label="名前を変える">✎</button>
+            <button type="button" class="icon-btn sm" data-cg-del="${c.id}" aria-label="削除">✕</button></div>
+          ${openColor === c.id ? `<div class="cg-colors">
+            ${CAT_SWATCHES.map((col) => `<button type="button" class="swatch ${col.toLowerCase() === c.color.toLowerCase() ? "on" : ""}" style="--cc:${col}" data-cg-set="${c.id}" data-col="${col}" aria-label="${col}"></button>`).join("")}
+            <label class="swatch free" style="--cc:${c.color}" aria-label="自由に選ぶ">🎨<input type="color" value="${c.color}" data-cg-free="${c.id}"></label>
+            <small class="note">最後の虹色の🎨を押すと、好きな色を自由に選べます</small>
+          </div>` : ""}
+        </div>`).join("")
         : `<p class="note">まだ分類はありません。下の「＋ 分類を追加」か、タスク・予定・ルーティンの編集画面から作れます。</p>`;
     };
     openSheet(`
@@ -922,7 +933,20 @@
       paint(f);
       $("#cg-close", f).onclick = () => { closeSheet(); render(); };
       $("#cg-add", f).onclick = () => { if (addCategory(prompt("新しい分類の名前（例：学校・バイト・趣味）") || "")) { paint(f); render(); } };
+      // 色見本を押したとき・自由に選んだとき
+      const setColor = (id, col) => {
+        const c = catOf(id);
+        if (!c || !/^#[0-9a-f]{6}$/i.test(col)) return;
+        c.color = col; save(); render();
+      };
+      $("#cg-list", f).addEventListener("input", (e) => {
+        const inp = e.target.closest("[data-cg-free]");
+        if (inp) { setColor(inp.dataset.cgFree, inp.value); f.querySelectorAll(`[data-cg-color="${inp.dataset.cgFree}"].cat-dot`).forEach((d) => d.style.setProperty("--cc", inp.value)); }
+      });
+      $("#cg-list", f).addEventListener("change", (e) => { if (e.target.closest("[data-cg-free]")) paint(f); });
       $("#cg-list", f).addEventListener("click", (e) => {
+        const sw = e.target.closest("[data-cg-set]");
+        if (sw) { setColor(sw.dataset.cgSet, sw.dataset.col); paint(f); return; }
         const ren = e.target.closest("[data-cg-ren]"), del = e.target.closest("[data-cg-del]"), col = e.target.closest("[data-cg-color]");
         const id = (ren || del || col || {}).dataset;
         if (!id) return;
@@ -932,7 +956,8 @@
           const name = (prompt("分類の名前", c.name) || "").trim();
           if (name && !state.categories.some((x) => x.name === name && x.id !== c.id)) c.name = name;
         } else if (col) {
-          c.color = CAT_COLORS[(CAT_COLORS.indexOf(c.color) + 1) % CAT_COLORS.length];
+          openColor = openColor === c.id ? "" : c.id;
+          paint(f); return;
         } else {
           if (!confirm(`分類「${c.name}」を削除しますか？\n付いていたタスク・予定・ルーティンは「未分類」になります（消えません）`)) return;
           state.categories = state.categories.filter((x) => x.id !== c.id);
