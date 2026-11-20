@@ -499,3 +499,12 @@ input[type=range] { width: 100%; accent-color: var(--primary); height: 28px; }
 .cat-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--cc); }
 /* 選んだ分類のボタンは、どの見た目でも分類の色にする */
 html:root .chip.cat-chip.on { background: var(--cc); border-color: var(--cc); color: #fff; box-shadow: none; }
+/* 分類の色えらび */
+.cg-item { display: grid; gap: 6px; }
+.cat-dot.big { width: 26px; height: 26px; border: 0; padding: 0; cursor: pointer; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line); }
+.cg-colors { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; padding: 10px; background: var(--surface-2); border-radius: 14px; }
+.cg-colors .note { grid-column: 1 / -1; margin: 2px 0 0; }
+.swatch { aspect-ratio: 1; border-radius: 50%; border: 0; padding: 0; background: var(--cc); cursor: pointer; position: relative; display: grid; place-items: center; font-size: 15px; }
+.swatch.on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--text); }
+.swatch.free { background: conic-gradient(#e8413a, #ffb02e, #9bd36a, #0fb5a6, #4f6bed, #b04fd6, #e8413a); overflow: hidden; }
+.swatch.free input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
